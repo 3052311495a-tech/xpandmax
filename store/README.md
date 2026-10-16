@@ -17,5 +17,5 @@
 - 沿用已有条目 ID `dckjdeemcnjccfbinnmncalmoajleboo`，不要新建插件。
 - 描述、storage 权限理由、隐私处理和测试说明见 `listing-zh-CN.txt`。
 - 截图使用上述两张 1280×800 图，均由本版真实资料展示脚本渲染虚构账号。
-- 隐私政策：`https://xpandmax.com/privacy/`。仅通知数字、左侧导航和右侧栏三个布尔开关保存在本机，不同步至云端；账号资料、关注状态及通知内容不持久化。
+- 隐私政策：`https://xpandmax.com/privacy/`。显示开关和可选 API 配置（含 Key）保存在本机，不同步至云端；账号资料、关注状态及通知内容不持久化。
 - 官方 API 发布命令及首次连接步骤见 [API.md](API.md)。本地打包不代表已经送审，以 API 返回和读回状态为准。

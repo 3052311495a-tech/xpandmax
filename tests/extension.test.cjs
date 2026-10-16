@@ -161,12 +161,16 @@ test('XHR 成功读取，接口失败和外域响应不会覆盖已知数字', a
   } finally { dom.window.close(); }
 });
 
-test('安装清单只匹配 X，仅用 storage 保存设置，脚本文件均存在', () => {
+test('安装清单仅向 X 注入脚本，翻译站点权限可选，运行文件均存在', () => {
   const manifest = JSON.parse(fs.readFileSync('extension/manifest.json'));
   assert.equal(manifest.manifest_version, 3);
   assert.deepEqual(manifest.permissions, ['storage']);
   assert.equal(manifest.host_permissions, undefined);
+  assert.deepEqual(manifest.optional_host_permissions, ['https://*/*']);
+  assert.ok(fs.existsSync(`extension/${manifest.background.service_worker}`));
+  assert.ok(fs.existsSync(`extension/${manifest.options_page}`));
   for (const script of manifest.content_scripts) {
+    assert.deepEqual(script.matches, ['https://x.com/*', 'https://twitter.com/*']);
     assert.equal(script.run_at, 'document_start');
     for (const file of [...script.js, ...(script.css || [])]) assert.ok(fs.existsSync(`extension/${file}`));
   }

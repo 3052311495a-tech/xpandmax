@@ -240,11 +240,12 @@
           control.dataset.xfcAction = action;
           setText(control, action === 'toggle' ? (details.dataset.xfcShowOriginal === 'true' ? '查看中文' : '查看原文')
             : translation.state === 'failed' ? '重试中文翻译' : '启用中文翻译');
-          control.title = action === 'enable' ? '首次使用需下载 Chrome 语言包，简介在本机翻译' : '';
+          control.title = action === 'enable' ? (translation.error || '本地翻译首次使用可能需要下载语言包；可在插件设置中选择翻译方式') : '';
         }
         if (translated) details.setAttribute('data-xfc-translated', '');
         else details.removeAttribute('data-xfc-translated');
         if (['queued', 'translating'].includes(translation?.state)) setText(part(body, 'data-xfc-translation-status'), '正在翻译…');
+        else if (translation?.state === 'failed' && translation.error) setText(part(body, 'data-xfc-translation-status'), translation.error);
         else body.querySelector('[data-xfc-translation-status]')?.remove();
         profile.root.setAttribute('data-xfc-inline-host', '');
         liveHosts.add(profile.root);

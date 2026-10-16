@@ -2,9 +2,12 @@
   "manifest_version": 3,
   "name": "XpandMax",
   "version": "0.9.4",
-  "description": "See blue follower counts and short Chinese bios on X. Compact, private, local, and no API key needed.",
+  "description": "See follower counts and Chinese bios on X. Local translation by default; optional no-key Google or custom API.",
   "minimum_chrome_version": "111",
   "permissions": ["storage"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "translation-background.js" },
+  "options_page": "translation-options.html",
   "action": {
     "default_title": "XpandMax 设置",
     "default_popup": "popup.html"
