@@ -16,6 +16,9 @@ const context = await chromium.launchPersistentContext(profile, {
 try {
   const page = await context.newPage();
   await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
+  const output = path.join(root, 'artifacts/browser-tests/login');
+  await fs.mkdir(output, { recursive: true });
+  await page.screenshot({ path: path.join(output, 'sign-in.png') });
   console.log('Dedicated X test browser is open. Complete X sign-in in this Chromium window. No manual extension loading is needed.');
   // A rendered composer is evidence of an authenticated app, rather than just a /home URL.
   await page.locator('[data-testid="tweetTextarea_0"]').waitFor({ timeout: 0 });
