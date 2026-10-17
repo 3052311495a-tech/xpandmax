@@ -1,6 +1,6 @@
 {
   "name": "xpandmax",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "private": true,
   "scripts": {
     "test": "node --test tests/*.test.cjs",
@@ -8,11 +8,16 @@
     "package:store": "python3 scripts/package.py --store",
     "store:configure": "node scripts/cws.mjs configure",
     "store:status": "node scripts/cws.mjs status",
-    "store:submit": "node scripts/cws.mjs submit",
-    "build:site": "python3 scripts/build_site.py"
+    "store:submit": "npm run verify:release && node scripts/cws.mjs submit",
+    "build:site": "python3 scripts/build_site.py",
+    "test:browser": "node scripts/test-browser.mjs",
+    "test:browser:live": "node scripts/test-browser.mjs --live",
+    "verify:release": "npm test && python3 -m unittest discover -s tests -p '*_test.py' && npm run test:browser && npm run test:browser:live",
+    "test:browser:login": "node scripts/login-test-browser.mjs"
   },
   "devDependencies": {
-    "jsdom": "^26.1.0"
+    "jsdom": "^26.1.0",
+    "playwright": "1.64.1"
   },
   "license": "MIT",
   "engines": {

@@ -24,6 +24,16 @@
       <input id="hide-sidebar-recommendations" type="checkbox" role="switch" checked disabled>
     </label>
   </fieldset>
+  <fieldset>
+    <legend>帖子流速</legend>
+    <label class="setting"><span><strong>显示流速徽章</strong><small>发布以来平均浏览量，不是最近一小时增量</small></span><input id="show-tweet-velocity" type="checkbox" role="switch" checked disabled></label>
+    <form id="velocity-thresholds">
+      <label>上升（浏览/小时）<input id="velocity-rising" type="number" min="0.01" step="any" value="1000" required></label>
+      <label>爆款（浏览/小时）<input id="velocity-viral" type="number" min="0.01" step="any" value="10000" required></label>
+      <button type="submit">保存阈值</button>
+      <small>爆款阈值须大于上升阈值</small>
+    </form>
+  </fieldset>
   <p id="status" role="status" aria-live="polite">正在读取设置…</p>
   <p><a href="translation-options.html" target="_blank" rel="noopener">简介翻译设置</a></p>
 </body>

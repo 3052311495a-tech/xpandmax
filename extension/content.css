@@ -187,3 +187,20 @@ html[data-xfc-hide-left-sidebar="true"] header[role="banner"]:has(nav[role="navi
 html[data-xfc-hide-left-sidebar="true"] header[role="banner"]:has(nav[role="navigation"]) ~ main[role="main"] {
   align-items: center !important;
 }
+
+[data-xfc-velocity] {
+  display: inline-block;
+  align-self: center;
+  flex-shrink: 0;
+  margin-inline-start: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  color: rgb(113, 118, 123);
+  background: rgba(113, 118, 123, .1);
+  cursor: help;
+}
+[data-xfc-velocity][data-tier="rising"] { color: #1d9bf0; background: rgba(29, 155, 240, .1); }
+[data-xfc-velocity][data-tier="viral"] { color: #e06a16; background: rgba(224, 106, 22, .12); }
