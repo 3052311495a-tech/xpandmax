@@ -79,6 +79,9 @@
         const createdAt = Date.parse(node.legacy?.created_at ?? node.created_at);
         const record = { id, observedAt: now, valid: !promoted && node.views?.state === 'EnabledWithCount'
           && Number.isSafeInteger(views) && views >= 0 && Number.isFinite(createdAt) && createdAt <= now };
+        const quoted = node.quoted_status_result?.result;
+        const quotedId = node.legacy?.quoted_status_id_str ?? quoted?.rest_id ?? quoted?.tweet?.rest_id;
+        if (typeof quotedId === 'string' && /^\d{1,25}$/.test(quotedId)) record.quotedId = quotedId;
         if (record.valid) {
           Object.assign(record, { views, createdAt });
           for (const [field, source] of Object.entries({ likes: 'favorite_count', reposts: 'retweet_count', replies: 'reply_count', bookmarks: 'bookmark_count' })) {

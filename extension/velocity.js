@@ -49,19 +49,36 @@
     return [metric('浏览', 'views'), metric('点赞', 'likes'), metric('转发', 'reposts'), metric('回复', 'replies'), metric('收藏', 'bookmarks'),
       `流速：${number(rate)}/小时（发布以来平均，最短按 6 分钟）`, `爆帖指数：${score}`, `发布时间：${new Date(record.createdAt).toLocaleString('zh-CN')}`].join('\n');
   }
+  function linkedId(author) {
+    const link = [...author.querySelectorAll('a[href]')].find(anchor => anchor.querySelector('time'));
+    if (!link) return;
+    try {
+      const url = new URL(link.getAttribute('href'), location.href);
+      if (url.origin === location.origin) return url.pathname.match(/^\/[a-zA-Z0-9_]{1,15}\/status\/(\d+)\/?$/)?.[1];
+    } catch { /* Unknown page shape: show nothing. */ }
+  }
+  function tweetId(author) {
+    const direct = linkedId(author);
+    if (direct) return direct;
+    // X quote cards have a time element but no status link. Resolve through
+    // the enclosing tweet's explicit quoted ID, never by display name alone.
+    const quote = author.closest('[role="link"]');
+    const article = author.closest('article');
+    if (!quote || !article || !article.contains(quote)) return;
+    const outer = [...article.querySelectorAll('[data-testid="User-Name"]')]
+      .find(row => !quote.contains(row) && row.closest('article') === article && linkedId(row));
+    const quotedId = outer && tweets.get(linkedId(outer))?.quotedId;
+    const record = tweets.get(quotedId);
+    const timestamp = Date.parse(author.querySelector('time')?.getAttribute('datetime'));
+    if (record && timestamp === record.createdAt) return quotedId;
+  }
   function render() {
     scheduled = false;
     const now = Date.now();
     for (const [id, record] of tweets) if (now - record.observedAt >= TTL) tweets.delete(id);
     const used = new Set();
     if (settings.showTweetVelocity) for (const author of document.querySelectorAll('[data-testid="User-Name"]')) {
-      // A timestamp's nearest author row identifies the original or quoted tweet independently.
-      const link = [...author.querySelectorAll('a[href]')].find(anchor => anchor.querySelector('time'));
-      let id;
-      try {
-        const url = new URL(link?.getAttribute('href') || '', location.href);
-        if (url.origin === location.origin) id = url.pathname.match(/^\/[a-zA-Z0-9_]{1,15}\/status\/(\d+)\/?$/)?.[1];
-      } catch { /* Unknown page shape: show nothing. */ }
+      const id = tweetId(author);
       const record = tweets.get(id);
       if (!record || !record.valid) continue;
       let badge = [...author.querySelectorAll('[data-xfc-velocity]')].find(node => node.closest('[data-testid="User-Name"]') === author);
@@ -69,7 +86,10 @@
         badge = document.createElement('span');
         badge.setAttribute('data-xfc-velocity', '');
         badge.tabIndex = 0;
-        author.append(badge);
+        const time = author.querySelector('time');
+        const timestamp = time?.closest('a') || time?.parentElement;
+        if (timestamp) timestamp.after(badge);
+        else author.append(badge);
       }
       const rate = record.views / Math.max((now - record.createdAt) / 3600000, 0.1);
       const tier = rate >= settings.velocityViralThreshold ? 'viral' : rate >= settings.velocityRisingThreshold ? 'rising' : 'normal';
@@ -94,10 +114,15 @@
       if (!record || typeof record.id !== 'string' || !/^\d{1,25}$/.test(record.id)
         || !Number.isFinite(record.observedAt) || record.observedAt > now || now - record.observedAt >= TTL
         || (tweets.get(record.id)?.observedAt > record.observedAt)) continue;
-      if (record.valid === false) { tweets.delete(record.id); continue; }
+      const quotedId = typeof record.quotedId === 'string' && /^\d{1,25}$/.test(record.quotedId) ? record.quotedId : undefined;
+      if (record.valid === false) {
+        tweets.delete(record.id);
+        tweets.set(record.id, { id: record.id, valid: false, observedAt: record.observedAt, quotedId });
+        continue;
+      }
       if (record.valid !== true || !Number.isSafeInteger(record.views) || record.views < 0
         || !Number.isFinite(record.createdAt) || record.createdAt < 0 || record.createdAt > now) continue;
-      const clean = { id: record.id, valid: true, views: record.views, createdAt: record.createdAt, observedAt: record.observedAt };
+      const clean = { id: record.id, valid: true, views: record.views, createdAt: record.createdAt, observedAt: record.observedAt, quotedId };
       for (const key of ['likes', 'reposts', 'replies', 'bookmarks']) {
         if (Number.isSafeInteger(record[key]) && record[key] >= 0) clean[key] = record[key];
       }
@@ -106,7 +131,7 @@
     while (tweets.size > 5000) tweets.delete(tweets.keys().next().value);
     schedule();
   });
-  new MutationObserver(schedule).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'data-testid'] });
+  new MutationObserver(schedule).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'data-testid', 'datetime'] });
   window.addEventListener('popstate', schedule);
   setInterval(schedule, 30000);
   window.postMessage({ channel: CHANNEL, type: 'ready' }, location.origin);

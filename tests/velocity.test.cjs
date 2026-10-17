@@ -119,3 +119,27 @@ test('popup rejects reversed and nonpositive thresholds and stores valid pair at
     assert.equal(JSON.stringify(writes), '[{"velocityRisingThreshold":500,"velocityViralThreshold":5000}]');
   } finally { dom.window.close(); }
 });
+
+test('real X quote cards without links use explicit quoted ID and matching timestamp', async () => {
+  const createdAt = Date.now() - 3600000;
+  const t = setup(`<article>${author('1')}<div role="link"><div data-testid="User-Name"><span>quoted author</span><div><time datetime="${new Date(createdAt).toISOString()}">1h</time></div></div></div></article>`);
+  try {
+    send(t.w, [record('1', { quotedId: '2', valid: false }), record('2', { createdAt, views: 5000 })]);
+    await tick();
+    assert.equal(t.w.document.querySelectorAll('[data-xfc-velocity]').length, 1);
+    assert.equal(t.w.document.querySelector('[role="link"] [data-xfc-velocity]').textContent, '5,000/小时');
+    t.w.document.querySelector('[role="link"] time').setAttribute('datetime', new Date(createdAt - 1000).toISOString());
+    await tick();
+    assert.equal(t.w.document.querySelectorAll('[data-xfc-velocity]').length, 0);
+  } finally { t.dom.window.close(); }
+});
+
+test('bridge retains explicit quote relationship and wraps visibility results', async () => {
+  const t = bridgeSetup();
+  try {
+    await t.receive(tweet('1', { views: { state: 'Disabled' }, quoted_status_result: { result: { __typename: 'TweetWithVisibilityResults', tweet: tweet('2') } } }));
+    assert.equal(t.messages.find(x => x.id === '1').quotedId, '2');
+    assert.equal(t.messages.find(x => x.id === '1').valid, false);
+    assert.equal(t.messages.find(x => x.id === '2').valid, true);
+  } finally { t.dom.window.close(); }
+});
