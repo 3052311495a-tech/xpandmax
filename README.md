@@ -84,6 +84,14 @@ npm run package:store
 
 `extension/` 为实际插件，`tests/` 为本地自动化测试。实际 Chrome 安装需要用户在扩展管理页完成。
 
+### 自动化浏览器验收
+
+首次准备执行 `npm ci` 和 `npx playwright install chromium`，此后运行 `npm run test:browser` 即可自动启动专用 Chromium、加载当前 `extension/`，验证真实的 Manifest V3 内容脚本、后台、popup 与本地存储。无需手动加载或重载插件，也不使用日常 Chrome 的配置、登录状态或 Cookie。测试资料均为虚构账号，X 页面和 GraphQL 响应由本地测试拦截提供；出站请求采用允许列表。
+
+每次 push/PR 的 `browser-extension` CI 检查自动运行这一套验收，报告及桌面/窄屏/popup 截图保存在 Actions 的 `extension-browser-test-report` 附件，本机结果在 `artifacts/browser-tests/isolated/`。检查包括原帖与无链接引用卡片、广告过滤、旧节点复用、设置开关、阈值保存和跨标签页生效。测试配置目录由程序创建并在结束时清除，扩展安装包不包含 Playwright。
+
+`npm run test:browser:live` 另外用干净、未登录的专用浏览器访问真实 X 页面，不模拟响应、不注入测试数据。报告在 `artifacts/browser-tests/live/`。只有实际出现流速徽章才通过；登录墙、站点阻拦或缺少有效数据会返回退出码 2，标记 `blocked`，不能冒充实页通过。它不复制个人浏览器的凭据，也不尝试绕过站点或浏览器限制。默认 CI 仅跑确定性的隔离测试。`npm run store:submit` 会先执行 `verify:release`，依次运行单元测试、打包测试、隔离浏览器验收和真实 X 检查；任何一项失败都不会进入商店上传。实页受阻时不得声称已经完成真实账号验收。
+
 ## 已知限制
 
 目前适配桌面版 Chrome 111 及以上版本。插件依赖 X 返回的数据与页面结构，无法保证所有实验界面都兼容。该项目与 X 官方没有隶属关系。
