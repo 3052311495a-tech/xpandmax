@@ -3,6 +3,7 @@
   const CHANNEL = 'x-follower-count-v1';
   const MAX_USERS = 5000;
   const users = new Map();
+  const tweets = new Map();
   const TTL = 30 * 60 * 1000;
   const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked'];
 
@@ -60,6 +61,50 @@
     return [...output.values()];
   }
 
+  // Never request tweet details: these metrics come only from responses X already received.
+  function consumeTweets(root) {
+    const stack = [{ node: root, promoted: false }];
+    const records = new Map();
+    let visited = 0;
+    const now = Date.now();
+    while (stack.length && visited++ < 50000) {
+      const { node, promoted: inherited } = stack.pop();
+      if (!node || typeof node !== 'object') continue;
+      const promoted = inherited || Object.hasOwn(node, 'promotedMetadata')
+        || Object.hasOwn(node, 'promoted_metadata') || /^promoted-/.test(node.entryId || node.entry_id || '');
+      const id = node.rest_id ?? node.legacy?.id_str;
+      if ((node.__typename === 'Tweet' || node.legacy?.created_at) && /^\d{1,25}$/.test(id || '')) {
+        const raw = node.views?.count;
+        const views = typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : raw;
+        const createdAt = Date.parse(node.legacy?.created_at ?? node.created_at);
+        const record = { id, observedAt: now, valid: !promoted && node.views?.state === 'EnabledWithCount'
+          && Number.isSafeInteger(views) && views >= 0 && Number.isFinite(createdAt) && createdAt <= now };
+        if (record.valid) {
+          Object.assign(record, { views, createdAt });
+          for (const [field, source] of Object.entries({ likes: 'favorite_count', reposts: 'retweet_count', replies: 'reply_count', bookmarks: 'bookmark_count' })) {
+            const value = node.legacy?.[source];
+            if (Number.isSafeInteger(value) && value >= 0) record[field] = value;
+          }
+        }
+        // If any occurrence belongs to an ad, fail closed for that response.
+        if (records.get(id)?.valid !== false) records.set(id, record);
+      }
+      for (const value of Object.values(node)) {
+        if (value && typeof value === 'object') stack.push({ node: value, promoted });
+      }
+    }
+    for (const [id, record] of records) { tweets.delete(id); tweets.set(id, record); }
+    for (const [id, record] of tweets) if (now - record.observedAt >= TTL) tweets.delete(id);
+    while (tweets.size > MAX_USERS) tweets.delete(tweets.keys().next().value);
+    publishTweets([...records.values()]);
+  }
+
+  function publishTweets(records) {
+    for (let i = 0; i < records.length; i += 250) {
+      window.postMessage({ channel: CHANNEL, type: 'tweets', tweets: records.slice(i, i + 250) }, location.origin);
+    }
+  }
+
   function publish(records) {
     for (let i = 0; i < records.length; i += 250) {
       window.postMessage({ channel: CHANNEL, type: 'counts', users: records.slice(i, i + 250) }, location.origin);
@@ -68,6 +113,7 @@
 
   function consume(json, url) {
     const records = extractUsers(json);
+    consumeTweets(json);
     const action = typeof url === 'string' && url.match(/\/friendships\/(create|destroy|cancel)\.json(?:\?|$)/)?.[1];
     if (action && json?.errors) return;
     // 原生关注接口成功时 following 仍可能是操作前的值，以成功动作和请求中标识为准。
@@ -141,5 +187,6 @@
       if (Object.keys(record.observedAt).length) records.push(record);
     }
     publish(records);
+    publishTweets([...tweets.values()].filter(record => now - record.observedAt < TTL));
   });
 })();
