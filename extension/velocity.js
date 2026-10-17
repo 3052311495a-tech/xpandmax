@@ -57,8 +57,32 @@
       if (url.origin === location.origin) return url.pathname.match(/^\/[a-zA-Z0-9_]{1,15}\/status\/(\d+)\/?$/)?.[1];
     } catch { /* Unknown page shape: show nothing. */ }
   }
-  function tweetId(author) {
+  function baseId(author) {
     const direct = linkedId(author);
+    if (direct) return direct;
+    // Detail pages move the permalink timestamp below the body. Only the main
+    // author of the article containing that exact permalink may use the route ID.
+    const article = author.closest('article');
+    const route = location.pathname.match(/^\/([a-zA-Z0-9_]{1,15})\/status\/(\d+)\/?$/);
+    if (!route || !article || article.querySelector('[data-testid="User-Name"]') !== author) return;
+    const profileMatches = [...author.querySelectorAll('a[href]')].some(link => {
+      try {
+        const url = new URL(link.getAttribute('href'), location.href);
+        return url.origin === location.origin && url.pathname.toLowerCase().replace(/\/$/, '') === '/' + route[1].toLowerCase();
+      } catch { return false; }
+    });
+    if (!profileMatches) return;
+    const hasPermalink = [...article.querySelectorAll('a[href]')].some(link => {
+      if (!link.querySelector('time') || link.closest('article') !== article) return false;
+      try {
+        const url = new URL(link.getAttribute('href'), location.href);
+        return url.origin === location.origin && url.pathname.replace(/\/$/, '') === location.pathname.replace(/\/$/, '');
+      } catch { return false; }
+    });
+    return hasPermalink ? route[2] : undefined;
+  }
+  function tweetId(author) {
+    const direct = baseId(author);
     if (direct) return direct;
     // X quote cards have a time element but no status link. Resolve through
     // the enclosing tweet's explicit quoted ID, never by display name alone.
@@ -66,8 +90,8 @@
     const article = author.closest('article');
     if (!quote || !article || !article.contains(quote)) return;
     const outer = [...article.querySelectorAll('[data-testid="User-Name"]')]
-      .find(row => !quote.contains(row) && row.closest('article') === article && linkedId(row));
-    const quotedId = outer && tweets.get(linkedId(outer))?.quotedId;
+      .find(row => !quote.contains(row) && row.closest('article') === article && baseId(row));
+    const quotedId = outer && tweets.get(baseId(outer))?.quotedId;
     const record = tweets.get(quotedId);
     const timestamp = Date.parse(author.querySelector('time')?.getAttribute('datetime'));
     if (record && timestamp === record.createdAt) return quotedId;

@@ -5,11 +5,19 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateChromeEvidence } from './extension-evidence.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const live = process.argv.includes('--live');
 const liveURL = 'https://x.com/bcherny/status/2111158659971699136';
 const output = path.join(root, 'artifacts/browser-tests', live ? 'live' : 'isolated');
 await fs.mkdir(output, { recursive: true });
+if (live && process.env.XPANDMAX_LIVE_EVIDENCE) {
+  const evidence = await validateChromeEvidence(process.env.XPANDMAX_LIVE_EVIDENCE, path.join(root, 'extension'));
+  await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(evidence, null, 2));
+  console.log(JSON.stringify({ status: 'passed', mode: evidence.mode, candidateDelivery: evidence.candidateDelivery,
+    verifiedAt: evidence.verifiedAt, extensionDigest: evidence.extensionDigest, samples: evidence.samples }, null, 2));
+  process.exit(0);
+}
 const profile = live ? path.join(os.homedir(), '.local/share/xpandmax-test/browser-profile')
   : await fs.mkdtemp(path.join(os.tmpdir(), 'xpandmax-test-'));
 if (live) await fs.mkdir(profile, { recursive: true, mode: 0o700 });

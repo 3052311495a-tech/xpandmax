@@ -143,3 +143,19 @@ test('bridge retains explicit quote relationship and wraps visibility results', 
     assert.equal(t.messages.find(x => x.id === '2').valid, true);
   } finally { t.dom.window.close(); }
 });
+
+test('detail permalink outside author row maps only the matching main author and its quote', async () => {
+  const createdAt = Date.now() - 3600000;
+  const t = setup(`<article><div data-testid="User-Name"><a href="/demo">Main author</a></div><p>Body</p><a href="/demo/status/1"><time>1h</time></a><div role="link"><div data-testid="User-Name"><span>Quote author</span><time datetime="${new Date(createdAt).toISOString()}">1h</time></div></div></article><article><div data-testid="User-Name"><a href="/other">Other author</a></div><a href="/other/status/3"><time>1h</time></a></article>`);
+  try {
+    t.w.history.replaceState({}, '', '/demo/status/1');
+    send(t.w, [record('1', { quotedId: '2' }), record('2', { createdAt }), record('3')]);
+    await tick();
+    assert.equal(t.w.document.querySelectorAll('[data-xfc-velocity]').length, 2);
+    assert.equal(t.w.document.querySelectorAll('article')[1].querySelector('[data-xfc-velocity]'), null);
+    t.w.history.replaceState({}, '', '/someone_else/status/1');
+    t.w.dispatchEvent(new t.w.PopStateEvent('popstate'));
+    await tick();
+    assert.equal(t.w.document.querySelectorAll('[data-xfc-velocity]').length, 0);
+  } finally { t.dom.window.close(); }
+});
