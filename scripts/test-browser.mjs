@@ -1,4 +1,4 @@
-// Independent Chromium test process. Never opens or reuses a personal browser profile.
+// Dedicated test Chromium. Never opens or reuses a personal browser profile.
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -7,16 +7,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const live = process.argv.includes('--live');
+const liveURL = 'https://x.com/bcherny/status/2111158659971699136';
 const output = path.join(root, 'artifacts/browser-tests', live ? 'live' : 'isolated');
 await fs.mkdir(output, { recursive: true });
-const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'xpandmax-test-'));
-const report = { mode: live ? 'real-x-anonymous' : 'isolated-extension', startedAt: new Date().toISOString(), checks: [], status: 'running' };
+const profile = live ? path.join(os.homedir(), '.local/share/xpandmax-test/browser-profile')
+  : await fs.mkdtemp(path.join(os.tmpdir(), 'xpandmax-test-'));
+if (live) await fs.mkdir(profile, { recursive: true, mode: 0o700 });
+const report = { mode: live ? 'real-x-dedicated-session' : 'isolated-extension', startedAt: new Date().toISOString(), checks: [], status: 'running' };
 let context;
 const check = (name, evidence) => report.checks.push({ name, evidence, status: 'passed' });
 async function launch() {
   const extension = path.join(root, 'extension');
   context = await chromium.launchPersistentContext(profile, {
-    channel: 'chromium', headless: true, viewport: { width: 1100, height: 850 },
+    channel: 'chromium', headless: !live, viewport: { width: 1100, height: 850 },
     args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
   });
   const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 15000 });
@@ -31,14 +34,23 @@ try {
   if (live) {
     // No route mocks, copied cookies, injected scripts or fabricated postMessage data.
     const page = await context.newPage();
+    let graphqlResponses = 0;
+    page.on('response', response => {
+      if (new URL(response.url()).pathname.startsWith('/i/api/graphql/')) graphqlResponses++;
+    });
     try {
-      await page.goto('https://x.com/yiren_ai', { waitUntil: 'domcontentloaded', timeout: 45000 });
+      const response = await page.goto(liveURL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      report.navigation = { url: liveURL, status: response?.status() };
+      if (!response?.ok()) throw new Error(`X returned HTTP ${response?.status()}`);
       await page.locator('[data-xfc-velocity]').first().waitFor({ timeout: 30000 });
     }
     catch (cause) {
       report.cause = cause.message;
+      report.pageModel = { graphqlResponses, authorRows: await page.locator('[data-testid="User-Name"]').count(),
+        articleCount: await page.locator('article').count() };
+      report.sessionSetup = 'npm run test:browser:login';
       report.status = 'blocked';
-      report.reason = 'Real X did not expose a usable timeline and velocity badge to this clean anonymous test session. Login or site access may be required; this is not a passing live test.';
+      report.reason = 'Real X did not expose the required GraphQL data and velocity badge to the dedicated test session. Anonymous SSR pages are not a positive feature test. Complete the dedicated browser login if needed; this is not a passing live test.';
       await page.screenshot({ path: path.join(output, 'live-blocked.png') }).catch(() => {});
       throw new Error(report.reason);
     }
@@ -113,7 +125,7 @@ try {
   process.exitCode = report.status === 'blocked' ? 2 : 1;
 } finally {
   await context?.close();
-  await fs.rm(profile, { recursive: true, force: true });
+  if (!live) await fs.rm(profile, { recursive: true, force: true });
   report.finishedAt = new Date().toISOString();
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));

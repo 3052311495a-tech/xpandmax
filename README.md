@@ -90,7 +90,9 @@ npm run package:store
 
 每次 push/PR 的 `browser-extension` CI 检查自动运行这一套验收，报告及桌面/窄屏/popup 截图保存在 Actions 的 `extension-browser-test-report` 附件，本机结果在 `artifacts/browser-tests/isolated/`。检查包括原帖与无链接引用卡片、广告过滤、旧节点复用、设置开关、阈值保存和跨标签页生效。测试配置目录由程序创建并在结束时清除，扩展安装包不包含 Playwright。
 
-`npm run test:browser:live` 另外用干净、未登录的专用浏览器访问真实 X 页面，不模拟响应、不注入测试数据。报告在 `artifacts/browser-tests/live/`。只有实际出现流速徽章才通过；登录墙、站点阻拦或缺少有效数据会返回退出码 2，标记 `blocked`，不能冒充实页通过。它不复制个人浏览器的凭据，也不尝试绕过站点或浏览器限制。默认 CI 仅跑确定性的隔离测试。`npm run store:submit` 会先执行 `verify:release`，依次运行单元测试、打包测试、隔离浏览器验收和真实 X 检查；任何一项失败都不会进入商店上传。实页受阻时不得声称已经完成真实账号验收。
+`npm run test:browser:live` 使用普通窗口模式的专用 Chromium 访问真实 X 公开帖子，不模拟响应、不注入测试数据。2026-10-17 对照检查发现无界面 Chromium 收到 HTTP 403，普通窗口可返回 HTTP 200；匿名访客界面又是不同的 SSR 布局，没有本功能所需的 GraphQL 数据，不能据此判定功能通过。首次可运行 `npm run test:browser:login`，仅需在专用窗口完成 X 登录，扩展自动加载；后续实页测试复用此专用会话。不会读取或复制日常 Chrome 的 Cookie。专用 profile 位于用户目录 `.local/share/xpandmax-test/browser-profile`，不进入仓库、CI 或发布包；不要将其上传或分享。
+
+实页报告在 `artifacts/browser-tests/live/`。只有真正加载数据并显示流速徽章才通过；缺少数据、登录未完成、访问受阻均以退出码 2 标记 `blocked`。默认 CI 仅跑确定性的隔离测试。`npm run store:submit` 会先执行 `verify:release`，依次运行单元测试、打包测试、隔离浏览器验收和真实 X 检查；任何一项失败都不会进入商店上传。实页受阻时不得声称已经完成真实账号验收。
 
 ## 已知限制
 

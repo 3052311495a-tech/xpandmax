@@ -12,7 +12,8 @@
     "build:site": "python3 scripts/build_site.py",
     "test:browser": "node scripts/test-browser.mjs",
     "test:browser:live": "node scripts/test-browser.mjs --live",
-    "verify:release": "npm test && python3 -m unittest discover -s tests -p '*_test.py' && npm run test:browser && npm run test:browser:live"
+    "verify:release": "npm test && python3 -m unittest discover -s tests -p '*_test.py' && npm run test:browser && npm run test:browser:live",
+    "test:browser:login": "node scripts/login-test-browser.mjs"
   },
   "devDependencies": {
     "jsdom": "^26.1.0",
