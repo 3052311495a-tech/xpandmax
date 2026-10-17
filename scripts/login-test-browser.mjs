@@ -16,6 +16,7 @@ const context = await chromium.launchPersistentContext(profile, {
 try {
   const page = await context.newPage();
   await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded' });
+  await page.locator('input').first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
   const output = path.join(root, 'artifacts/browser-tests/login');
   await fs.mkdir(output, { recursive: true });
   await page.screenshot({ path: path.join(output, 'sign-in.png') });
