@@ -53,9 +53,12 @@
   if (window.xpandmaxMonitor && document.getElementById('monitor-accounts')) {
     const monitor = window.xpandmaxMonitor;
     const webhookInput = document.getElementById('monitor-webhook-url');
+    const authInput = document.getElementById('monitor-webhook-auth');
+    const clearAuth = document.getElementById('monitor-webhook-auth-clear');
     const accountList = document.getElementById('monitor-accounts');
     const empty = document.getElementById('monitor-empty');
     let webhookDirty = false;
+    let authDirty = false;
     const renderMonitor = () => {
       const accounts = monitor.list().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
       accountList.replaceChildren();
@@ -80,8 +83,30 @@
       }
       empty.hidden = accounts.length > 0;
       if (webhookInput && !webhookDirty) webhookInput.value = monitor.webhook();
+      if (authInput && !authDirty) {
+        authInput.value = '';
+        authInput.placeholder = monitor.hasWebhookAuth() ? '已保存，留空则不修改' : '粘贴 Authorization，如 Bearer …';
+      }
+      if (clearAuth) clearAuth.hidden = !monitor.hasWebhookAuth();
     };
     webhookInput.addEventListener('input', () => { webhookDirty = true; });
+    authInput?.addEventListener('input', () => { authDirty = true; });
+    clearAuth?.addEventListener('click', async () => {
+      clearAuth.disabled = true;
+      try {
+        const result = await monitor.saveWebhook(monitor.webhook(), '');
+        if (!result.ok) status.textContent = result.error || '密钥未清除，请重试';
+        else {
+          authDirty = false;
+          authInput.value = '';
+          authInput.placeholder = '粘贴 Authorization，如 Bearer …';
+          clearAuth.hidden = true;
+          status.textContent = '已清除 Authorization，名单和 Webhook 地址仍保留';
+        }
+      } catch {
+        status.textContent = '密钥未清除，请重试';
+      } finally { clearAuth.disabled = false; }
+    });
     document.getElementById('monitor-webhook').addEventListener('submit', async event => {
       event.preventDefault();
       const validated = monitor.validateWebhook(webhookInput.value);
@@ -89,19 +114,30 @@
         status.textContent = 'Webhook 须为 HTTPS 地址，不能包含账号密码或片段，也不能指向 X';
         return;
       }
-      const button = event.target.querySelector('button');
+      const authValue = authDirty ? monitor.validateWebhookAuth(authInput.value) : undefined;
+      if (authValue === null) {
+        status.textContent = 'Authorization 不能包含换行或控制字符';
+        return;
+      }
+      const button = event.target.querySelector('button[type="submit"]');
       button.disabled = true;
       try {
         if (validated) {
           const granted = await chrome.permissions.request({ origins: [`${new URL(validated).origin}/*`] });
           if (!granted) { status.textContent = '未允许访问该站点，Webhook 未保存'; return; }
         }
-        const result = await monitor.saveWebhook(validated);
+        const result = await monitor.saveWebhook(validated, authValue);
         if (!result.ok) status.textContent = result.error || 'Webhook 未保存，请重试';
         else {
           webhookDirty = false;
+          authDirty = false;
           webhookInput.value = result.url || '';
-          status.textContent = validated ? '已保存 Webhook。之后加入或移出监控名单时会通知该地址' : '已清除 Webhook，名单仍只保存在本机';
+          authInput.value = '';
+          authInput.placeholder = result.hasAuth ? '已保存，留空则不修改' : '粘贴 Authorization，如 Bearer …';
+          if (clearAuth) clearAuth.hidden = !result.hasAuth;
+          status.textContent = !validated ? '已清除 Webhook，名单仍只保存在本机'
+            : result.hasAuth ? '已保存 Webhook 和 Authorization。之后加入或移出监控名单时会通知该地址'
+            : '已保存 Webhook。之后加入或移出监控名单时会通知该地址';
         }
       } catch {
         status.textContent = 'Webhook 未保存，请重试';

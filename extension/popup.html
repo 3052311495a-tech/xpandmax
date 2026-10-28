@@ -39,10 +39,14 @@
     <legend>账号监控</legend>
     <form id="monitor-webhook">
       <label>Webhook（可选）
-        <input id="monitor-webhook-url" type="url" inputmode="url" maxlength="2048" placeholder="https://example.com/hook" autocomplete="off" spellcheck="false">
+        <input id="monitor-webhook-url" type="url" inputmode="url" maxlength="2048" placeholder="粘贴 Webhook URL" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Authorization（可选）
+        <input id="monitor-webhook-auth" type="password" maxlength="4096" placeholder="粘贴 Authorization，如 Bearer …" autocomplete="off" spellcheck="false">
       </label>
       <button type="submit">保存 Webhook</button>
-      <small>只保存在本机。加入或移出名单时向该地址发送通知；留空则不发送。须为 HTTPS，不能含账号密码或片段，也不能指向 X。</small>
+      <button id="monitor-webhook-auth-clear" type="button" hidden>清除密钥</button>
+      <small>只保存在本机。加入或移出名单时向该地址 POST。Grok Bot 请粘贴例程面板里的 Webhook URL，以及 Authorization 的完整值（通常是 Bearer …）。留空地址则不发送。须为 HTTPS，不能含账号密码或片段，也不能指向 X。保存后不再显示密钥。</small>
     </form>
     <ul id="monitor-accounts" aria-label="监控名单"></ul>
     <p id="monitor-empty">还没有监控账号。在作者行点击「监控」即可加入。</p>

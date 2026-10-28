@@ -199,6 +199,27 @@ test('Webhook 保存前校验地址；未授权不写入', async () => {
     await tick();
     assert.equal(backend.data.monitorWebhookUrl, '');
     assert.equal(requests.length, 2);
+    input.value = 'https://hooks.example/xpand?token=synthetic';
+    const auth = w.document.querySelector('#monitor-webhook-auth');
+    auth.value = 'Bearer synthetic-token';
+    auth.dispatchEvent(new w.Event('input', { bubbles: true }));
+    submit();
+    await tick();
+    assert.equal(backend.data.monitorWebhookAuth, 'Bearer synthetic-token');
+    assert.equal(auth.value, '');
+    assert.match(auth.placeholder, /已保存/);
+    assert.doesNotMatch(w.document.body.textContent, /synthetic-token/);
+    submit();
+    await tick();
+    assert.equal(backend.data.monitorWebhookAuth, 'Bearer synthetic-token');
+    assert.equal(w.xpandmaxMonitor.validateWebhookAuth('Bearer bad\r\nbad'), null);
+    const rejected = await w.xpandmaxMonitor.saveWebhook(input.value, 'Bearer bad\r\nbad');
+    assert.equal(rejected.ok, false);
+    assert.equal(backend.data.monitorWebhookAuth, 'Bearer synthetic-token');
+    w.document.querySelector('#monitor-webhook-auth-clear').click();
+    await tick();
+    assert.equal(backend.data.monitorWebhookAuth, '');
+    assert.equal(backend.data.monitorWebhookUrl, 'https://hooks.example/xpand?token=synthetic');
   } finally { dom.window.close(); }
 });
 
@@ -221,12 +242,12 @@ test('弹窗列出本机名单，移出后通知 unmonitor', async () => {
   } finally { dom.window.close(); }
 });
 
-function setupBackground({ webhook = '', allowed = true, status = 200, fail = false } = {}) {
+function setupBackground({ webhook = '', auth = '', allowed = true, status = 200, fail = false } = {}) {
   const requests = [];
   let listener;
   const chrome = {
     runtime: { id: 'test', getURL: path => `chrome-extension://test/${path}`, onMessage: { addListener(fn) { listener = fn; } } },
-    storage: { local: { get: async () => ({ monitorWebhookUrl: webhook }), set: async () => {} }, onChanged: { addListener() {} } },
+    storage: { local: { get: async () => ({ monitorWebhookUrl: webhook, monitorWebhookAuth: auth }), set: async () => {} }, onChanged: { addListener() {} } },
     permissions: { contains: async () => allowed }
   };
   vm.runInNewContext(fs.readFileSync('extension/translation-background.js', 'utf8'), {
@@ -269,6 +290,15 @@ test('配置了 Webhook 才 POST 固定字段，不附带简介、Cookie 或调�
   assert.equal(live.requests[0][1].redirect, 'error');
   assert.equal(live.requests[0][1].referrerPolicy, 'no-referrer');
   assert.equal(JSON.stringify(live.requests[0][1].headers), JSON.stringify({ 'Content-Type': 'application/json' }));
+  assert.equal(live.requests[0][1].headers.Authorization, undefined);
+  const authed = setupBackground({ webhook: 'https://hooks.example/xpand', auth: 'Bearer synthetic-token' });
+  assert.equal((await authed.send({ type: 'monitor-notify', action: 'monitor', account: { username: 'alice' } })).notified, true);
+  assert.equal(authed.requests[0][1].headers.Authorization, 'Bearer synthetic-token');
+  assert.equal(authed.requests[0][1].credentials, 'omit');
+  assert.equal(authed.requests[0][1].headers.Cookie, undefined);
+  const injected = setupBackground({ webhook: 'https://hooks.example/xpand', auth: 'Bearer bad\r\nX-Evil: 1' });
+  assert.equal((await injected.send({ type: 'monitor-notify', action: 'unmonitor', account: { username: 'alice' } })).notified, true);
+  assert.equal(injected.requests[0][1].headers.Authorization, undefined);
   assert.equal(live.requests[0][1].body, JSON.stringify({
     action: 'monitor', platform: 'x', username: 'alice', userId: '42', profileUrl: 'https://x.com/alice', source: 'xpandmax'
   }));

@@ -186,6 +186,14 @@
     return url.href;
   }
 
+  function validateMonitorAuth(value) {
+    if (value == null) return '';
+    const text = String(value).trim();
+    if (!text) return '';
+    if (text.length > 4096 || /[\u0000-\u001F\u007F]/.test(text)) return null;
+    return text;
+  }
+
   function monitorPayload(action, input) {
     if (action !== 'monitor' && action !== 'unmonitor') return null;
     const username = typeof input?.username === 'string' ? input.username.trim().replace(/^@/, '').toLowerCase() : '';
@@ -201,9 +209,11 @@
     const payload = monitorPayload(message?.action, message?.account);
     if (!payload) return { ok: false, notified: false, error: '账号无效' };
     let endpoint;
+    let monitorAuth = '';
     try {
-      const stored = await chrome.storage.local.get('monitorWebhookUrl');
+      const stored = await chrome.storage.local.get(['monitorWebhookUrl', 'monitorWebhookAuth']);
       endpoint = validateMonitorWebhook(stored.monitorWebhookUrl);
+      monitorAuth = validateMonitorAuth(stored.monitorWebhookAuth) || '';
     } catch {
       return { ok: false, notified: false, error: 'Webhook 通知失败' };
     }
@@ -218,7 +228,7 @@
     try {
       const response = await fetch(endpoint, {
         method: 'POST', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal
+        headers: { 'Content-Type': 'application/json', ...(monitorAuth ? { Authorization: monitorAuth } : {}) }, body: JSON.stringify(payload), signal: controller.signal
       });
       try { await response.body?.cancel?.(); } catch { /* 通知不需要响应正文。 */ }
       if (!response.ok) return { ok: true, notified: false, error: 'Webhook 通知失败' };
