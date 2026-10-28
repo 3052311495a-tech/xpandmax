@@ -11,11 +11,14 @@ a { color:inherit; text-decoration:none; }
 time { color:#536471; margin-left:6px; }
 [role="link"] { border:1px solid #cfd9de; border-radius:12px; padding:16px; margin-top:16px; }
 button { cursor:pointer; }
+/* X often pulls tweet buttons out of flow; both extension controls must stay side by side. */
+article button { position: absolute !important; top: 0 !important; left: 0 !important; width: 0 !important; height: 0 !important; overflow: hidden !important; }
 </style>
 <main data-testid="primaryColumn">
 <h1>扩展自动验收 · 合成账号</h1>
 <article data-testid="tweet">
 <div data-testid="User-Name"><div><a href="/fixture_author">测试作者</a></div><div><a href="/fixture_author/status/101"><time>1 小时</time></a></div></div>
+<button data-testid="caret" aria-expanded="false" aria-label="更多">…</button>
 <p>原帖与无独立链接的引用帖应分别显示流速。</p>
 <div role="link"><div data-testid="User-Name"><div>引用作者</div><div><span>@fixture_quote</span><div><time id="quote-time">2 小时</time></div></div></div><p>引用卡片不使用原帖的数据。</p></div>
 <div role="group">回复 · 转发 · 喜欢</div>

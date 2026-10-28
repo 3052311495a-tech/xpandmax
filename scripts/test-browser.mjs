@@ -74,7 +74,7 @@ try {
     const html = await fs.readFile(path.join(root, 'tests/browser/fixture.html'), 'utf8');
     const tweet = (id, views, hours, extra = {}) => ({ __typename: 'Tweet', rest_id: id,
       views: { state: 'EnabledWithCount', count: String(views) },
-      core: { user_results: { result: { core: { screen_name: id === '102' ? 'fixture_quote' : 'fixture_author' }, relationship_counts: { followers: 1234 }, profile_bio: { description: '合成测试简介' } } } },
+      core: { user_results: { result: { core: { screen_name: id === '102' ? 'fixture_quote' : 'fixture_author' }, relationship_counts: { followers: 1234 }, relationship_perspectives: { following: false }, profile_bio: { description: '合成测试简介' } } } },
       legacy: { created_at: new Date(now - hours * 3600000).toUTCString(), favorite_count: 100, retweet_count: 20, reply_count: 5, bookmark_count: 10 }, ...extra });
     // X returns whole-second timestamps. Keep the fixture equally precise.
     const preciseQuoteTime = new Date(new Date(quoteTime).setMilliseconds(0)).toISOString();
@@ -95,6 +95,23 @@ try {
     assert.equal(await page.locator('article').nth(1).locator('[data-xfc-velocity]').count(), 0);
     assert.equal(await page.locator('[role="link"] [data-xfc-velocity]').getAttribute('data-tier'), 'viral');
     await page.locator('[data-xfc-inline-profile]').first().waitFor();
+    const placed = await page.locator('article').first().locator('[data-xfc-inline-profile]').first().locator('[data-xfc-actions]').evaluate(node => {
+      const follow = node.querySelector(':scope > [data-xfc-follow]');
+      const monitor = node.querySelector(':scope > [data-xfc-monitor]');
+      const a = follow.getBoundingClientRect();
+      const b = monitor.getBoundingClientRect();
+      return {
+        labels: [follow.textContent, monitor.textContent],
+        position: getComputedStyle(follow).position,
+        separated: a.width > 0 && b.width > 0 && b.left >= a.right - 1 && Math.abs(a.top - b.top) < 8,
+        overlap: a.right > b.left + 1 && a.left < b.right - 1 && a.bottom > b.top + 1 && a.top < b.bottom - 1
+      };
+    });
+    assert.deepEqual(placed.labels, ['关注', '监控']);
+    assert.equal(placed.position, 'relative');
+    assert.equal(placed.separated, true);
+    assert.equal(placed.overlap, false);
+    check('follow-and-monitor-side-by-side', 'Follow and monitor stay side by side when the page absolutely positions buttons');
     const monitorButton = page.locator('[data-xfc-inline-profile] [data-xfc-monitor]').first();
     assert.equal(await monitorButton.getAttribute('data-xfc-handle'), 'fixture_author');
     await monitorButton.click();
