@@ -162,9 +162,17 @@
     return button;
   }
 
-  function placeBefore(node, sibling) {
-    if (!node || !sibling || node.parentElement !== sibling.parentElement || node.nextElementSibling === sibling) return;
-    sibling.parentElement.insertBefore(node, sibling);
+  function actionRow(inlineRow, toggle) {
+    const actions = part(inlineRow, 'data-xfc-actions', 'div');
+    if (actions.nextElementSibling !== toggle) inlineRow.insertBefore(actions, toggle);
+    return actions;
+  }
+
+  function placeAction(actions, follow, monitor) {
+    if (follow && follow.parentElement !== actions) actions.append(follow);
+    if (monitor && monitor.parentElement !== actions) actions.append(monitor);
+    if (follow && monitor && follow.nextElementSibling !== monitor) actions.insertBefore(follow, monitor);
+    if (!actions.childElementCount) actions.remove();
   }
 
   function render() {
@@ -266,10 +274,10 @@
           follow.setAttribute('aria-label', `${label} @${profile.handle}`);
           follow.title = followState?.message || (state === 'success' ? `已关注，点击取消关注 @${profile.handle}` : `${label} @${profile.handle}`);
         }
-        const monitor = syncMonitor(inlineRow, profile.handle, record, theme);
+        const actions = actionRow(inlineRow, toggle);
+        const monitor = syncMonitor(actions, profile.handle, record, theme);
         if (monitor) liveMonitors.add(monitor);
-        placeBefore(monitor, toggle);
-        placeBefore(follow, monitor || toggle);
+        placeAction(actions, follow, monitor);
         const body = part(details, 'data-xfc-expanded', 'div');
         body.hidden = !open;
         for (const [field, value] of [['bio', displayedBio], ['location', location]]) {

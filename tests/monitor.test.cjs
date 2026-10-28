@@ -67,7 +67,12 @@ test('监控按钮出现在原帖、引用、自己和账号卡片上，伪造�
     const buttons = [...page.w.document.querySelectorAll('[data-xfc-monitor]')];
     assert.deepEqual(buttons.map(button => button.dataset.xfcHandle).sort(), ['alice', 'bob', 'dave', 'me']);
     assert.equal(page.w.document.querySelectorAll('[data-xfc-follow]').length, 1);
-    const alice = page.w.document.querySelector('article [data-xfc-monitor]');
+    const aliceActions = page.w.document.querySelector('article [data-xfc-inline-profile] [data-xfc-actions]');
+    assert.deepEqual([...aliceActions.children].map(node => node.hasAttribute('data-xfc-follow') ? 'follow' : 'monitor'), ['follow', 'monitor']);
+    const quoteActions = page.w.document.querySelector('[role="link"] [data-xfc-actions]');
+    assert.equal(quoteActions.querySelector('[data-xfc-follow]'), null);
+    assert.equal(quoteActions.querySelector('[data-xfc-monitor]').textContent, '监控');
+    const alice = aliceActions.querySelector('[data-xfc-monitor]');
     assert.equal(alice.dataset.xfcUserId, '42');
     assert.equal(alice.textContent, '监控');
     assert.equal(page.w.document.querySelector('[data-testid="UserCell"] [data-xfc-badge]').textContent, '粉丝 4');
@@ -78,6 +83,34 @@ test('监控按钮出现在原帖、引用、自己和账号卡片上，伪造�
     assert.equal(toggles, 0);
     assert.equal(page.data.monitorAccounts, undefined);
   } finally { page.dom.window.close(); }
+});
+
+test('页面把按钮绝对定位时，关注和监控仍并排且可点', async () => {
+  const css = fs.readFileSync('extension/content.css', 'utf8');
+  const hostile = 'article button,[data-testid="tweet"] button{position:absolute !important;top:0 !important;left:0 !important;width:0 !important;height:0 !important;overflow:hidden !important;}';
+  const backend = storageBackend();
+  const dom = new JSDOM(`<style>${css}</style><style>${hostile}</style><article data-testid="tweet">${header('Alice')}<button data-testid="caret"></button></article>`, {
+    url: 'https://x.com/home', runScripts: 'outside-only', pretendToBeVisual: true
+  });
+  const w = dom.window;
+  w.chrome = backend.chrome;
+  w.postMessage = data => w.dispatchEvent(new w.MessageEvent('message', { data, origin: w.location.origin, source: w }));
+  try {
+    w.eval(fs.readFileSync('extension/monitor.js', 'utf8'));
+    w.eval(fs.readFileSync('extension/content.js', 'utf8'));
+    w.postMessage({ channel: 'x-follower-count-v1', type: 'counts', users: [{ handle: 'Alice', count: 10, bio: '简介', following: false }] });
+    await tick();
+    const actions = w.document.querySelector('[data-xfc-actions]');
+    const follow = actions.querySelector(':scope > [data-xfc-follow]');
+    const monitor = actions.querySelector(':scope > [data-xfc-monitor]');
+    assert.equal(follow.textContent, '关注');
+    assert.equal(monitor.textContent, '监控');
+    assert.equal(follow.nextElementSibling, monitor);
+    assert.equal(follow.parentElement, actions);
+    assert.equal(monitor.parentElement, actions);
+    // jsdom applies a later !important rule even when its selector is less specific.
+    // Chromium coverage is follow-and-monitor-side-by-side in scripts/test-browser.mjs.
+  } finally { dom.window.close(); }
 });
 
 test('加入和移出只写入用户名等标识，并通知 monitor 与 unmonitor', async () => {

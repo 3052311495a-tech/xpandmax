@@ -38,13 +38,49 @@
   text-align: start !important;
 }
 [data-xfc-inline-profile][data-xfc-theme="dark"] { color: #9babb7 !important; }
-[data-xfc-inline-row] { display: flex !important; align-items: center !important; gap: 8px !important; min-width: 0 !important; }
-[data-xfc-inline-row] > [data-xfc-toggle] { flex: 1 !important; width: auto !important; }
-[data-xfc-inline-row] > [data-xfc-count-toggle] { flex: 0 0 auto !important; }
+[data-xfc-inline-row] { display: flex !important; flex-flow: row nowrap !important; align-items: center !important; gap: 8px !important; min-width: 0 !important; position: relative !important; }
+[data-xfc-inline-row] > [data-xfc-toggle] {
+  position: relative !important; inset: auto !important; top: auto !important; right: auto !important; bottom: auto !important; left: auto !important;
+  transform: none !important; height: auto !important; overflow: visible !important;
+  flex: 1 !important; width: auto !important; min-width: 0 !important;
+}
+[data-xfc-inline-row] > [data-xfc-count-toggle] {
+  position: relative !important; inset: auto !important; flex: 0 0 auto !important; min-width: max-content !important;
+}
+[data-xfc-inline-row] > [data-xfc-actions] {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  flex-flow: row nowrap !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 6px !important;
+  position: relative !important;
+  inset: auto !important;
+  width: auto !important;
+  min-width: max-content !important;
+  margin: 0 !important;
+  z-index: 1 !important;
+}
 [data-xfc-follow],
 [data-xfc-monitor] {
   appearance: none !important;
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+  float: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   flex: 0 0 auto !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: max-content !important;
+  max-width: none !important;
+  overflow: visible !important;
   padding: 0 8px !important;
   margin: 0 !important;
   border: 1px solid #cce6f7 !important;
@@ -55,6 +91,26 @@
   line-height: 20px !important;
   white-space: nowrap !important;
   cursor: pointer !important;
+  z-index: 1 !important;
+}
+/* Beat page rules such as [data-testid="tweet"] button { position:absolute }, which otherwise stack 关注 under 监控. */
+[data-xfc-inline-row] > [data-xfc-actions] > [data-xfc-follow],
+[data-xfc-inline-row] > [data-xfc-actions] > [data-xfc-monitor] {
+  position: relative !important;
+  inset: auto !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: none !important;
+  float: none !important;
+  width: auto !important;
+  height: auto !important;
+  min-width: max-content !important;
+  max-width: none !important;
+  overflow: visible !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
 }
 [data-xfc-follow]:not(:disabled):hover,
 [data-xfc-monitor]:not(:disabled):hover { background: rgba(29, 155, 240, .1) !important; }
@@ -130,6 +186,7 @@
 [data-xfc-inline-profile] [hidden] { display: none !important; }
 @media (max-width: 520px) {
   [data-xfc-inline-row] { flex-wrap: wrap !important; gap: 2px 8px !important; }
+  [data-xfc-inline-row] > [data-xfc-actions] { flex-wrap: nowrap !important; }
   [data-xfc-inline-row] > [data-xfc-summary-toggle] { flex-basis: 100% !important; }
   [data-xfc-summary] { padding: 0 !important; border: 0 !important; }
 }
