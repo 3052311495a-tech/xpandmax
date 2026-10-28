@@ -49,4 +49,65 @@
     }
     status.textContent = '设置自动保存，切换后立即生效';
   });
+
+  if (window.xpandmaxMonitor && document.getElementById('monitor-accounts')) {
+    const monitor = window.xpandmaxMonitor;
+    const webhookInput = document.getElementById('monitor-webhook-url');
+    const accountList = document.getElementById('monitor-accounts');
+    const empty = document.getElementById('monitor-empty');
+    let webhookDirty = false;
+    const renderMonitor = () => {
+      const accounts = monitor.list().sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+      accountList.replaceChildren();
+      for (const account of accounts) {
+        const item = document.createElement('li');
+        const name = document.createElement('span');
+        name.textContent = `@${account.username}`;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = '移出';
+        remove.setAttribute('aria-label', `移出 @${account.username}`);
+        remove.addEventListener('click', async () => {
+          remove.disabled = true;
+          const result = await monitor.remove(account.username);
+          if (!result?.ok) status.textContent = result?.error || '移出失败，请重试';
+          else if (result.notifyError) status.textContent = `已移出 @${account.username}。${result.notifyError}`;
+          else if (result.notified) status.textContent = `已移出 @${account.username}，并已通知 Webhook`;
+          else status.textContent = `已移出 @${account.username}`;
+        });
+        item.append(name, remove);
+        accountList.append(item);
+      }
+      empty.hidden = accounts.length > 0;
+      if (webhookInput && !webhookDirty) webhookInput.value = monitor.webhook();
+    };
+    webhookInput.addEventListener('input', () => { webhookDirty = true; });
+    document.getElementById('monitor-webhook').addEventListener('submit', async event => {
+      event.preventDefault();
+      const validated = monitor.validateWebhook(webhookInput.value);
+      if (validated === null) {
+        status.textContent = 'Webhook 须为 HTTPS 地址，不能包含账号密码或片段，也不能指向 X';
+        return;
+      }
+      const button = event.target.querySelector('button');
+      button.disabled = true;
+      try {
+        if (validated) {
+          const granted = await chrome.permissions.request({ origins: [`${new URL(validated).origin}/*`] });
+          if (!granted) { status.textContent = '未允许访问该站点，Webhook 未保存'; return; }
+        }
+        const result = await monitor.saveWebhook(validated);
+        if (!result.ok) status.textContent = result.error || 'Webhook 未保存，请重试';
+        else {
+          webhookDirty = false;
+          webhookInput.value = result.url || '';
+          status.textContent = validated ? '已保存 Webhook。之后加入或移出监控名单时会通知该地址' : '已清除 Webhook，名单仍只保存在本机';
+        }
+      } catch {
+        status.textContent = 'Webhook 未保存，请重试';
+      } finally { button.disabled = false; }
+    });
+    window.addEventListener('xpandmax:monitor', renderMonitor);
+    renderMonitor();
+  }
 })();

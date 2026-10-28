@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>XpandMax</title>
   <link rel="stylesheet" href="popup.css">
+  <script src="monitor.js" defer></script>
   <script src="popup.js" defer></script>
 </head>
 <body>
@@ -33,6 +34,18 @@
       <button type="submit">保存阈值</button>
       <small>爆款阈值须大于上升阈值</small>
     </form>
+  </fieldset>
+  <fieldset>
+    <legend>账号监控</legend>
+    <form id="monitor-webhook">
+      <label>Webhook（可选）
+        <input id="monitor-webhook-url" type="url" inputmode="url" maxlength="2048" placeholder="https://example.com/hook" autocomplete="off" spellcheck="false">
+      </label>
+      <button type="submit">保存 Webhook</button>
+      <small>只保存在本机。加入或移出名单时向该地址发送通知；留空则不发送。须为 HTTPS，不能含账号密码或片段，也不能指向 X。</small>
+    </form>
+    <ul id="monitor-accounts" aria-label="监控名单"></ul>
+    <p id="monitor-empty">还没有监控账号。在作者行点击「监控」即可加入。</p>
   </fieldset>
   <p id="status" role="status" aria-live="polite">正在读取设置…</p>
   <p><a href="translation-options.html" target="_blank" rel="noopener">简介翻译设置</a></p>

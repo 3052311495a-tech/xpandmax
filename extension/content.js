@@ -2,7 +2,7 @@
   'use strict';
   const CHANNEL = 'x-follower-count-v1';
   const BADGE = 'data-xfc-badge';
-  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked'];
+  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked', 'userId'];
   const counts = new Map();
   const TTL = 30 * 60 * 1000;
   let scheduled = false;
@@ -15,7 +15,10 @@
     const now = Date.now();
     const profile = {};
     for (const field of FIELDS) {
-      if (cached[field] && now - cached[field].at < TTL) profile[field] = cached[field].value;
+      if (cached[field] && now - cached[field].at < TTL) {
+        profile[field] = cached[field].value;
+        if (field === 'following') profile.followingRevision = cached[field].token || 0;
+      }
     }
     return profile;
   }
@@ -132,6 +135,38 @@
     return node;
   }
 
+  function syncMonitor(parent, handle, record, theme) {
+    const api = window.xpandmaxMonitor;
+    let button = [...parent.children].find(child => child.hasAttribute('data-xfc-monitor'));
+    if (!api?.has) { button?.remove(); return null; }
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('data-xfc-monitor', '');
+      parent.append(button);
+    }
+    const on = api.has(handle);
+    const label = on ? '已监控' : '监控';
+    setText(button, label);
+    button.dataset.xfcHandle = handle;
+    button.dataset.xfcOn = String(on);
+    if (theme) button.dataset.xfcTheme = theme;
+    if (typeof record.userId === 'string' && /^\d{1,25}$/.test(record.userId)) button.dataset.xfcUserId = record.userId;
+    else delete button.dataset.xfcUserId;
+    button.disabled = !!api.pending?.(handle);
+    button.setAttribute('aria-pressed', String(on));
+    const notice = api.notice?.(handle) || '';
+    const actionLabel = on ? '取消监控' : '监控';
+    button.setAttribute('aria-label', `${actionLabel} @${handle}`);
+    button.title = notice || (on ? `移出监控名单 @${handle}` : `加入监控名单 @${handle}`);
+    return button;
+  }
+
+  function placeBefore(node, sibling) {
+    if (!node || !sibling || node.parentElement !== sibling.parentElement || node.nextElementSibling === sibling) return;
+    sibling.parentElement.insertBefore(node, sibling);
+  }
+
   function render() {
     scheduled = false;
     const theme = pageTheme();
@@ -149,6 +184,7 @@
     const liveProfiles = new Set();
     const liveHosts = new Set();
     const liveRows = new Set();
+    const liveMonitors = new Set();
     for (const profile of targets) {
       const record = profileData(profile.handle);
       const known = record.count !== undefined;
@@ -211,19 +247,29 @@
           && profile.handle !== ownHandle && !record.followBlocked
           && ((record.following === false && !record.followRequestSent) || !!followState);
         let follow = inlineRow.querySelector('[data-xfc-follow]');
-        if (!canFollow) follow?.remove();
+        if (!canFollow) { follow?.remove(); follow = null; }
         else {
           follow = follow || part(inlineRow, 'data-xfc-follow', 'button');
           follow.type = 'button';
           const state = followState?.status || 'idle';
-          const label = { pending: '关注中…', success: '已关注', requested: '已请求', error: '重试关注' }[state] || '关注';
+          const action = followState?.action || 'follow';
+          const offersUnfollow = state === 'success' || action === 'unfollow';
+          const label = state === 'pending' ? (action === 'unfollow' ? '取消中…' : '关注中…')
+            : state === 'success' ? '取消关注'
+            : state === 'requested' ? '已请求'
+            : state === 'error' ? (action === 'unfollow' ? '重试取消' : '重试关注')
+            : '关注';
           setText(follow, label);
           follow.dataset.xfcFollowState = state;
-          follow.disabled = ['pending', 'success', 'requested'].includes(state);
+          follow.dataset.xfcFollowAction = offersUnfollow ? 'unfollow' : 'follow';
+          follow.disabled = state === 'pending' || state === 'requested';
           follow.setAttribute('aria-label', `${label} @${profile.handle}`);
-          follow.title = followState?.message || `关注 @${profile.handle}`;
-          if (follow.nextElementSibling !== toggle) inlineRow.insertBefore(follow, toggle);
+          follow.title = followState?.message || (state === 'success' ? `已关注，点击取消关注 @${profile.handle}` : `${label} @${profile.handle}`);
         }
+        const monitor = syncMonitor(inlineRow, profile.handle, record, theme);
+        if (monitor) liveMonitors.add(monitor);
+        placeBefore(monitor, toggle);
+        placeBefore(follow, monitor || toggle);
         const body = part(details, 'data-xfc-expanded', 'div');
         body.hidden = !open;
         for (const [field, value] of [['bio', displayedBio], ['location', location]]) {
@@ -265,12 +311,18 @@
         badge.dataset.xfcTheme = theme;
         badge.dataset.xfcState = known ? 'ready' : 'pending';
         setText(badge, known ? `粉丝 ${formatCount(record.count)}` : '粉丝 —');
+        const monitor = syncMonitor(row, profile.handle, record, theme);
+        if (monitor) {
+          liveMonitors.add(monitor);
+          if (badge.nextElementSibling !== monitor) badge.insertAdjacentElement('afterend', monitor);
+        }
         row.setAttribute('data-xfc-name-row', '');
         liveRows.add(row);
         liveBadges.add(badge);
       }
     }
     document.querySelectorAll(`[${BADGE}]`).forEach(node => { if (!liveBadges.has(node)) node.remove(); });
+    document.querySelectorAll('[data-xfc-monitor]').forEach(node => { if (!liveMonitors.has(node)) node.remove(); });
     document.querySelectorAll('[data-xfc-relationship]').forEach(node => node.remove());
     document.querySelectorAll('[data-xfc-inline-profile]').forEach(node => { if (!liveProfiles.has(node)) node.remove(); });
     document.querySelectorAll('[data-xfc-inline-host]').forEach(node => { if (!liveHosts.has(node)) node.removeAttribute('data-xfc-inline-host'); });
@@ -301,12 +353,13 @@
       for (const field of FIELDS) {
         const value = user[field];
         const valid = field === 'count' ? Number.isSafeInteger(value) && value >= 0
+          : field === 'userId' ? typeof value === 'string' && /^\d{1,25}$/.test(value)
           : ['following', 'followRequestSent', 'followBlocked'].includes(field) ? typeof value === 'boolean'
             : typeof value === 'string' && value.length <= (field === 'bio' ? 2000 : 300);
         if (!valid) continue;
         const at = user.observedAt?.[field] ?? now;
         if (!Number.isFinite(at) || at > now || now - at >= TTL || (cached[field] && at < cached[field].at)) continue;
-        cached[field] = { value, at };
+        cached[field] = { value, at, token: (cached[field]?.token || 0) + 1 };
         updated = true;
       }
       if (!updated) continue;
@@ -323,6 +376,14 @@
     return target?.closest('[data-xfc-inline-profile]') ? null : target;
   }
   document.addEventListener('click', event => {
+    const monitor = event.target instanceof Element ? event.target.closest('[data-xfc-monitor]') : null;
+    if (monitor) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.isTrusted || monitor.disabled) return;
+      window.xpandmaxMonitor?.toggle({ username: monitor.dataset.xfcHandle, userId: monitor.dataset.xfcUserId });
+      return;
+    }
     const follow = event.target instanceof Element ? event.target.closest('[data-xfc-follow]') : null;
     if (follow) {
       event.preventDefault();
@@ -330,7 +391,9 @@
       // 只有真实点击或键盘激活可以关注；网页伪造事件不会触发账号操作。
       if (!event.isTrusted || follow.disabled) return;
       const details = follow.closest('[data-xfc-inline-profile]');
-      window.xpandmaxFollow?.start({ button: follow, details, handle: details.dataset.xfcHandle, getProfile: profileData });
+      const args = { button: follow, details, handle: details.dataset.xfcHandle, getProfile: profileData };
+      if (follow.dataset.xfcFollowAction === 'unfollow') window.xpandmaxFollow?.unfollow(args);
+      else window.xpandmaxFollow?.start(args);
       return;
     }
     const toggle = event.target instanceof Element ? event.target.closest('[data-xfc-toggle]') : null;
@@ -356,6 +419,7 @@
   }, true);
   window.addEventListener('xpandmax:translation', schedule);
   window.addEventListener('xpandmax:followstate', schedule);
+  window.addEventListener('xpandmax:monitor', schedule);
   document.addEventListener('mouseover', event => {
     const anchor = previewTarget(event);
     if (anchor) showPreview(anchor);

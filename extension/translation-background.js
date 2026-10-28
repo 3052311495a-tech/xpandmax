@@ -172,13 +172,73 @@
     }
   }
 
+  // 与 extension/monitor.js 的 validateWebhook 保持同一规则。
+  function validateMonitorWebhook(value) {
+    if (value == null) return '';
+    const text = String(value).trim();
+    if (!text) return '';
+    if (text.length > 2048) return null;
+    let url;
+    try { url = new URL(text); } catch { return null; }
+    const host = url.hostname.replace(/\.$/, '').toLowerCase();
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash
+      || host === 'x.com' || host === 'twitter.com' || host.endsWith('.x.com') || host.endsWith('.twitter.com')) return null;
+    return url.href;
+  }
+
+  function monitorPayload(action, input) {
+    if (action !== 'monitor' && action !== 'unmonitor') return null;
+    const username = typeof input?.username === 'string' ? input.username.trim().replace(/^@/, '').toLowerCase() : '';
+    if (!/^[a-z0-9_]{1,15}$/.test(username)) return null;
+    const payload = { action, platform: 'x', username };
+    if (typeof input?.userId === 'string' && /^\d{1,25}$/.test(input.userId)) payload.userId = input.userId;
+    payload.profileUrl = `https://x.com/${username}`;
+    payload.source = 'xpandmax';
+    return payload;
+  }
+
+  async function notifyMonitor(message) {
+    const payload = monitorPayload(message?.action, message?.account);
+    if (!payload) return { ok: false, notified: false, error: '账号无效' };
+    let endpoint;
+    try {
+      const stored = await chrome.storage.local.get('monitorWebhookUrl');
+      endpoint = validateMonitorWebhook(stored.monitorWebhookUrl);
+    } catch {
+      return { ok: false, notified: false, error: 'Webhook 通知失败' };
+    }
+    if (endpoint === null) return { ok: false, notified: false, error: 'Webhook 地址无效' };
+    if (!endpoint) return { ok: true, notified: false };
+    let allowed = false;
+    try { allowed = await chrome.permissions.contains({ origins: [`${new URL(endpoint).origin}/*`] }); }
+    catch { allowed = false; }
+    if (!allowed) return { ok: true, notified: false, error: '尚未允许访问 Webhook 站点' };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal
+      });
+      try { await response.body?.cancel?.(); } catch { /* 通知不需要响应正文。 */ }
+      if (!response.ok) return { ok: true, notified: false, error: 'Webhook 通知失败' };
+      return { ok: true, notified: true };
+    } catch {
+      return { ok: true, notified: false, error: 'Webhook 通知失败' };
+    } finally { clearTimeout(timer); }
+  }
+
   chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (sender.id !== chrome.runtime.id || !message || typeof message !== 'object') return;
     const settings = sender.url === chrome.runtime.getURL('translation-options.html');
+    const popupPage = sender.url === chrome.runtime.getURL('popup.html');
     const xPage = sender.tab && sender.frameId === 0 && /^https:\/\/(x\.com|twitter\.com)\//.test(sender.url || '');
+    const monitorMessage = message.type === 'monitor-notify';
     if (!(settings && ['translation-config', 'translation-save', 'translation-test'].includes(message.type))
-      && !(xPage && ['translation-status', 'translate-bio'].includes(message.type))) return;
+      && !(xPage && (['translation-status', 'translate-bio'].includes(message.type) || monitorMessage))
+      && !(popupPage && monitorMessage)) return;
     (async () => {
+      if (monitorMessage) return notifyMonitor(message);
       if (message.type === 'translation-status') {
         const currentRevision = revision();
         const { provider } = await getConfig();

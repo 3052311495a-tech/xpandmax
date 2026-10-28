@@ -25,7 +25,7 @@ function setup() {
   const send = users => w.postMessage({ channel: 'x-follower-count-v1', type: 'counts', users });
   const article = w.document.querySelector('article');
   const caret = article.querySelector('[data-testid="caret"]');
-  const state = { following: false };
+  const state = { following: false, followingRevision: 0 };
   let clicks = 0;
   function nativeMenu(label = '关注 @Alice', result) {
     caret.onclick = () => {
@@ -42,8 +42,10 @@ function setup() {
     };
   }
   async function ready(extra = {}) { send([{ handle: 'Alice', count: 12500, bio: '简介', following: false, ...extra }, { handle: 'Bob', count: 2, following: false }, { handle: 'Me', count: 3, following: false }]); await tick(); }
-  function start() { const details = article.querySelector('[data-xfc-inline-profile]'); return w.xpandmaxFollow.start({ button: details.querySelector('[data-xfc-follow]'), details, handle: 'alice', getProfile: () => state }); }
-  return { dom, w, article, caret, send, state, nativeMenu, ready, start, clicks: () => clicks };
+  function call(method) { const details = article.querySelector('[data-xfc-inline-profile]'); return w.xpandmaxFollow[method]({ button: details.querySelector('[data-xfc-follow]'), details, handle: 'alice', getProfile: () => state }); }
+  const start = () => call('start');
+  const unfollow = () => call('unfollow');
+  return { dom, w, article, caret, send, state, nativeMenu, ready, start, unfollow, clicks: () => clicks };
 }
 
 test('关注按钮只给未关注的主帖作者显示，自己、引用作者、已关注和请求中不显示', async () => {
@@ -71,7 +73,7 @@ test('网页伪造的点击不能发起关注，关注按钮也不展开简介',
   } finally { f.dom.window.close(); }
 });
 
-test('只点一次精确匹配的原生关注，等待服务器确认后才显示已关注', async () => {
+test('只点一次精确匹配的原生关注，确认成功后同一按钮提供取消关注', async () => {
   const f = setup();
   try {
     await f.ready(); f.nativeMenu();
@@ -82,7 +84,11 @@ test('只点一次精确匹配的原生关注，等待服务器确认后才显�
     await f.start(); assert.equal(f.clicks(), 1);
     f.state.following = true; f.send([{ handle: 'Alice', following: true }]);
     await task; await tick();
-    assert.equal(f.article.querySelector('[data-xfc-follow]').textContent, '已关注');
+    const button = f.article.querySelector('[data-xfc-follow]');
+    assert.equal(button.textContent, '取消关注');
+    assert.equal(button.disabled, false);
+    assert.equal(button.dataset.xfcFollowAction, 'unfollow');
+    assert.match(button.title, /已关注/);
     assert.equal(f.article.querySelector('[data-xfc-expanded]').hidden, true);
     assert.equal(f.w.document.querySelector('[role="menu"]'), null);
     assert.equal(f.w.document.documentElement.hasAttribute('data-xfc-follow-menu'), false);
@@ -149,5 +155,136 @@ test('桥接兼容新旧关注状态并读取原生关注结果，不读取关�
     body = { screen_name: 'Alice', following: true, errors: [{ message: 'failed' }] };
     await f.w.fetch('fixture'); await tick(); assert.equal(messages.length, count);
     url = 'https://x.com/i/api/1.1/favorites/create.json'; await f.w.fetch('fixture'); await tick(); assert.equal(messages.length, count);
+    url = 'https://x.com/i/api/graphql/example/TweetResult';
+    body = { __typename: 'Tweet', rest_id: '999', core: { screen_name: 'Alice' }, relationship_counts: { followers: 3 } };
+    await f.w.fetch('fixture'); await tick();
+    assert.equal(Object.hasOwn(messages.at(-1).users.find(user => user.handle === 'alice'), 'userId'), false);
+    url = 'https://x.com/i/api/graphql/example/UserByRestId';
+    body = { __typename: 'User', rest_id: '42', core: { screen_name: 'Carol' }, relationship_counts: { followers: 8 } };
+    await f.w.fetch('fixture'); await tick();
+    assert.equal(messages.at(-1).users.find(user => user.handle === 'carol').userId, '42');
+    url = 'https://x.com/i/api/1.1/friendships/destroy.json';
+    body = { screen_name: 'Carol', id_str: '42', followers_count: 8, following: true };
+    await f.w.fetch('fixture'); await tick();
+    const carol = messages.at(-1).users.find(user => user.handle === 'carol');
+    assert.equal(carol.following, false);
+    assert.equal(carol.userId, '42');
+  } finally { f.dom.window.close(); }
+});
+
+test('关注成功后只点一次原生取消关注，确认后恢复为关注', async () => {
+  const f = setup();
+  try {
+    await f.ready(); f.nativeMenu();
+    const followed = f.start();
+    f.state.following = true; f.send([{ handle: 'Alice', following: true }]);
+    await followed; await tick();
+    f.nativeMenu('Unfollow @Alice', () => {
+      f.state.following = false;
+      f.state.followingRevision += 1;
+      f.send([{ handle: 'Alice', following: false }]);
+    });
+    await f.unfollow(); await tick();
+    assert.equal(f.clicks(), 2);
+    assert.equal(f.w.xpandmaxFollow.state('alice'), undefined);
+    assert.equal(f.article.querySelector('[data-xfc-follow]').textContent, '关注');
+    assert.equal(f.article.querySelector('[data-xfc-expanded]').hidden, true);
+    assert.equal(f.w.document.querySelector('[role="menu"]'), null);
+  } finally { f.dom.window.close(); }
+});
+
+test('取消关注会点一次写明同一账号的原生确认按钮', async () => {
+  const f = setup();
+  let confirms = 0;
+  try {
+    await f.ready(); f.nativeMenu();
+    const followed = f.start();
+    f.state.following = true; f.send([{ handle: 'Alice', following: true }]);
+    await followed;
+    f.nativeMenu('取消关注 @Alice', () => {
+      const dialog = f.w.document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.append(f.w.document.createTextNode('取消关注 @Alice？'));
+      const confirm = f.w.document.createElement('div');
+      confirm.setAttribute('role', 'button');
+      confirm.textContent = '取消关注';
+      confirm.onclick = () => {
+        confirms += 1;
+        f.state.following = false;
+        f.state.followingRevision += 1;
+        f.send([{ handle: 'Alice', following: false }]);
+        dialog.remove();
+      };
+      const cancel = f.w.document.createElement('button');
+      cancel.textContent = '取消';
+      dialog.append(confirm, cancel);
+      f.w.document.body.append(dialog);
+    });
+    await f.unfollow(); await tick();
+    assert.equal(confirms, 1);
+    assert.equal(f.clicks(), 2);
+    assert.equal(f.article.querySelector('[data-xfc-follow]').textContent, '关注');
+    assert.equal(f.w.document.querySelector('[role="dialog"]'), null);
+  } finally { f.dom.window.close(); }
+});
+
+test('取消关注不会点关注菜单、别人的确认框或已打开的弹窗', async () => {
+  const f = setup();
+  let confirms = 0;
+  try {
+    await f.ready(); f.nativeMenu();
+    const followed = f.start();
+    f.state.following = true; f.send([{ handle: 'Alice', following: true }]);
+    await followed; await tick();
+    f.nativeMenu('关注 @Alice');
+    await f.unfollow();
+    assert.equal(f.clicks(), 1);
+    assert.equal(f.w.xpandmaxFollow.state('alice'), undefined);
+
+    f.state.following = true;
+    const open = f.w.document.createElement('div');
+    open.setAttribute('role', 'dialog');
+    open.textContent = '已打开 @Alice';
+    f.w.document.body.append(open);
+    await f.unfollow();
+    assert.equal(f.clicks(), 1);
+    assert.equal(f.w.xpandmaxFollow.state('alice').status, 'error');
+    assert.match(f.w.xpandmaxFollow.state('alice').message, /菜单或弹窗/);
+    open.remove();
+    await tick();
+
+    const nativeTimeout = f.w.setTimeout.bind(f.w);
+    f.w.setTimeout = (fn, delay, ...args) => nativeTimeout(fn, delay === 10000 ? 20 : delay, ...args);
+    f.nativeMenu('Unfollow @Alice', () => {
+      const dialog = f.w.document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.textContent = 'Unfollow @Bob?';
+      const confirm = f.w.document.createElement('button');
+      confirm.textContent = 'Unfollow';
+      confirm.onclick = () => { confirms += 1; };
+      dialog.append(confirm);
+      f.w.document.body.append(dialog);
+    });
+    await f.unfollow(); await tick();
+    assert.equal(confirms, 0);
+    assert.equal(f.clicks(), 2);
+    assert.equal(f.w.xpandmaxFollow.state('alice').status, 'error');
+    assert.equal(f.article.querySelector('[data-xfc-follow]').textContent, '重试取消');
+  } finally { f.dom.window.close(); }
+});
+
+test('网页伪造的点击不能取消关注', async () => {
+  const f = setup();
+  let calls = 0;
+  try {
+    await f.ready(); f.nativeMenu();
+    const followed = f.start();
+    f.state.following = true; f.send([{ handle: 'Alice', following: true }]);
+    await followed; await tick();
+    f.w.xpandmaxFollow.unfollow = () => { calls += 1; };
+    f.article.querySelector('[data-xfc-follow]').click();
+    await tick();
+    assert.equal(calls, 0);
+    assert.equal(f.article.querySelector('[data-xfc-expanded]').hidden, true);
   } finally { f.dom.window.close(); }
 });
