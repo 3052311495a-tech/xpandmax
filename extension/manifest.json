@@ -38,6 +38,7 @@
       "js": [
         "settings.js",
         "follow.js",
+        "monitor.js",
         "translation.js",
         "content.js",
         "velocity.js"

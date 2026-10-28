@@ -41,7 +41,8 @@
 [data-xfc-inline-row] { display: flex !important; align-items: center !important; gap: 8px !important; min-width: 0 !important; }
 [data-xfc-inline-row] > [data-xfc-toggle] { flex: 1 !important; width: auto !important; }
 [data-xfc-inline-row] > [data-xfc-count-toggle] { flex: 0 0 auto !important; }
-[data-xfc-follow] {
+[data-xfc-follow],
+[data-xfc-monitor] {
   appearance: none !important;
   flex: 0 0 auto !important;
   padding: 0 8px !important;
@@ -55,10 +56,15 @@
   white-space: nowrap !important;
   cursor: pointer !important;
 }
-[data-xfc-follow]:not(:disabled):hover { background: rgba(29, 155, 240, .1) !important; }
-[data-xfc-follow]:focus-visible { outline: 2px solid #1d9bf0 !important; outline-offset: 2px !important; }
-[data-xfc-follow]:disabled { border-color: transparent !important; color: inherit !important; cursor: default !important; }
-[data-xfc-inline-profile][data-xfc-theme="dark"] [data-xfc-follow]:not(:disabled) { color: #6abcf2 !important; border-color: #30566f !important; }
+[data-xfc-follow]:not(:disabled):hover,
+[data-xfc-monitor]:not(:disabled):hover { background: rgba(29, 155, 240, .1) !important; }
+[data-xfc-follow]:focus-visible,
+[data-xfc-monitor]:focus-visible { outline: 2px solid #1d9bf0 !important; outline-offset: 2px !important; }
+[data-xfc-follow]:disabled,
+[data-xfc-monitor]:disabled { border-color: transparent !important; color: inherit !important; cursor: default !important; }
+[data-xfc-inline-profile][data-xfc-theme="dark"] [data-xfc-follow]:not(:disabled),
+[data-xfc-monitor][data-xfc-theme="dark"]:not(:disabled) { color: #6abcf2 !important; border-color: #30566f !important; }
+[data-xfc-monitor][data-xfc-on="true"]:not(:disabled) { background: rgba(29, 155, 240, .12) !important; }
 [data-xfc-follow-menu] [role="menu"] { visibility: hidden !important; }
 [data-xfc-toggle] {
   appearance: none !important;

@@ -5,7 +5,16 @@
   const users = new Map();
   const tweets = new Map();
   const TTL = 30 * 60 * 1000;
-  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked'];
+  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked', 'userId'];
+
+  function userIdOf(node) {
+    if (node.__typename === 'Tweet' || node.__typename === 'TweetWithVisibilityResults') return '';
+    const id = node.rest_id ?? node.id_str ?? node.legacy?.id_str;
+    if (typeof id !== 'string' || !/^\d{1,25}$/.test(id)) return '';
+    const userShaped = node.__typename === 'User' || !!node.relationship_counts || !!node.profile_bio
+      || typeof node.followers_count === 'number' || typeof node.legacy?.followers_count === 'number';
+    return userShaped ? id : '';
+  }
 
   function readableBio(text, urls) {
     let result = text;
@@ -52,6 +61,8 @@
           record.bio = readableBio(bio, urls).slice(0, 2000);
         }
         if (typeof location === 'string') record.location = location.slice(0, 300);
+        const userId = userIdOf(node);
+        if (userId) record.userId = userId;
         if (Object.keys(record).length > 1) output.set(key, { ...output.get(key), ...record });
       }
       for (const value of Object.values(node)) {

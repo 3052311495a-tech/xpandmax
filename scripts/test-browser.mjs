@@ -95,6 +95,11 @@ try {
     assert.equal(await page.locator('article').nth(1).locator('[data-xfc-velocity]').count(), 0);
     assert.equal(await page.locator('[role="link"] [data-xfc-velocity]').getAttribute('data-tier'), 'viral');
     await page.locator('[data-xfc-inline-profile]').first().waitFor();
+    const monitorButton = page.locator('[data-xfc-inline-profile] [data-xfc-monitor]').first();
+    assert.equal(await monitorButton.getAttribute('data-xfc-handle'), 'fixture_author');
+    await monitorButton.click();
+    await page.waitForFunction(() => document.querySelector('[data-xfc-inline-profile] [data-xfc-monitor]')?.textContent === '已监控');
+    check('monitor-list-add', 'Author monitor button stores the account in extension local storage');
     check('manifest-bridge-content-isolated-world', 'Original, linkless quote, profiles and promoted filtering render through the installed extension');
     await page.screenshot({ path: path.join(output, 'desktop.png') });
     const popup = await context.newPage();
@@ -109,8 +114,13 @@ try {
     await page.waitForFunction(() => [...document.querySelectorAll('[data-xfc-velocity]')].every(n => n.dataset.tier === 'viral'));
     await popup.reload();
     assert.equal(await popup.locator('#velocity-viral').inputValue(), '500');
+    await popup.locator('#monitor-accounts').getByText('@fixture_author').waitFor();
     check('real-popup-storage-change-and-reload', 'Toggle and thresholds propagate through chrome.storage and persist after popup reload');
+    check('monitor-list-in-popup', 'Personal monitor list survives popup reload');
     await popup.screenshot({ path: path.join(output, 'popup.png') });
+    await popup.getByRole('button', { name: '移出 @fixture_author' }).click();
+    await page.waitForFunction(() => document.querySelector('[data-xfc-inline-profile] [data-xfc-monitor]')?.textContent === '监控');
+    check('monitor-list-remove', 'Removing an account in the popup updates the author button');
     const second = await context.newPage(); await second.goto(url);
     await second.waitForFunction(() => document.querySelectorAll('[data-xfc-velocity][data-tier="viral"]').length === 2);
     check('second-tab-storage', 'A new X tab reads saved settings');
