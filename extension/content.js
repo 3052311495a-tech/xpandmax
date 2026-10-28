@@ -251,9 +251,10 @@
         const ownLink = document.querySelector('[data-testid="AppTabBar_Profile_Link"]')?.getAttribute('href');
         const ownHandle = ownLink?.replace(/^\//, '').replace(/\/$/, '').toLowerCase();
         const followState = window.xpandmaxFollow?.state(profile.handle);
+        const followingNow = record.following === true;
         const canFollow = primaryHeader === profile.root && !!article.querySelector('[data-testid="caret"]')
           && profile.handle !== ownHandle && !record.followBlocked
-          && ((record.following === false && !record.followRequestSent) || !!followState);
+          && (followingNow || (record.following === false && !record.followRequestSent) || !!followState);
         let follow = inlineRow.querySelector('[data-xfc-follow]');
         if (!canFollow) { follow?.remove(); follow = null; }
         else {
@@ -261,9 +262,9 @@
           follow.type = 'button';
           const state = followState?.status || 'idle';
           const action = followState?.action || 'follow';
-          const offersUnfollow = state === 'success' || action === 'unfollow';
+          const offersUnfollow = state === 'success' || action === 'unfollow' || (state === 'idle' && followingNow);
           const label = state === 'pending' ? (action === 'unfollow' ? '取消中…' : '关注中…')
-            : state === 'success' ? '取消关注'
+            : state === 'success' || (state === 'idle' && followingNow) ? '取消关注'
             : state === 'requested' ? '已请求'
             : state === 'error' ? (action === 'unfollow' ? '重试取消' : '重试关注')
             : '关注';
@@ -272,7 +273,7 @@
           follow.dataset.xfcFollowAction = offersUnfollow ? 'unfollow' : 'follow';
           follow.disabled = state === 'pending' || state === 'requested';
           follow.setAttribute('aria-label', `${label} @${profile.handle}`);
-          follow.title = followState?.message || (state === 'success' ? `已关注，点击取消关注 @${profile.handle}` : `${label} @${profile.handle}`);
+          follow.title = followState?.message || (offersUnfollow && state !== 'error' && state !== 'pending' ? `已关注，点击取消关注 @${profile.handle}` : `${label} @${profile.handle}`);
         }
         const actions = actionRow(inlineRow, toggle);
         const monitor = syncMonitor(actions, profile.handle, record, theme);
