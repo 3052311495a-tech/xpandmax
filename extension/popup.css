@@ -20,13 +20,18 @@ input:disabled { opacity: .5; cursor: wait; }
 #velocity-thresholds input { width: 100px; }
 #velocity-thresholds small { color: #536471; }
 #monitor-webhook { display: grid; gap: 8px; }
-#monitor-webhook-url {
+#monitor-webhook-url,
+#monitor-webhook-auth {
   appearance: none; flex: 1 1 auto; width: 100%; height: auto; min-height: 28px; margin: 0;
   padding: 4px 8px; border: 1px solid light-dark(#cfd9de, #333639); border-radius: 8px;
   background: light-dark(#f7f9f9, #202327); color: inherit; font: inherit; box-sizing: border-box;
 }
-#monitor-webhook-url::before { content: none; }
-#monitor-webhook-url:disabled { opacity: .5; }
+#monitor-webhook-url::before,
+#monitor-webhook-auth::before { content: none; }
+#monitor-webhook-url:disabled,
+#monitor-webhook-auth:disabled { opacity: .5; }
+#monitor-webhook-auth-clear { justify-self: start; font: inherit; }
+#monitor-webhook-auth-clear[hidden] { display: none; }
 #monitor-accounts { list-style: none; max-height: 140px; margin: 12px 0 0; padding: 0; overflow: auto; }
 #monitor-accounts li { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 #monitor-accounts button { font: inherit; }

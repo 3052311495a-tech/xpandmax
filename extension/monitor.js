@@ -1,6 +1,14 @@
 (() => {
   'use strict';
   // 与 translation-background.js 的 validateMonitorWebhook 保持同一规则。
+  function validateWebhookAuth(value) {
+    if (value == null) return '';
+    const text = String(value).trim();
+    if (!text) return '';
+    if (text.length > 4096 || /[\u0000-\u001F\u007F]/.test(text)) return null;
+    return text;
+  }
+
   function validateWebhook(value) {
     if (value == null) return '';
     const text = String(value).trim();
@@ -20,6 +28,7 @@
   const pending = new Set();
   const notices = new Map();
   let webhookUrl = '';
+  let webhookAuth = '';
   let accountEpoch = 0;
   let webhookEpoch = 0;
 
@@ -148,24 +157,28 @@
     }
   }
 
-  function saveWebhook(value) {
+  function saveWebhook(value, auth) {
     const validated = validateWebhook(value);
     if (validated === null) return Promise.resolve({ ok: false, error: 'Webhook 须为 HTTPS 地址，不能包含账号密码或片段，也不能指向 X' });
+    const nextAuth = auth === undefined ? webhookAuth : validateWebhookAuth(auth);
+    if (nextAuth === null) return Promise.resolve({ ok: false, error: 'Authorization 不能包含换行或控制字符' });
     const storage = globalThis.chrome?.storage?.local;
     const epoch = ++webhookEpoch;
     if (!storage) {
       webhookUrl = validated;
+      webhookAuth = nextAuth;
       publish();
-      return Promise.resolve({ ok: true, url: validated });
+      return Promise.resolve({ ok: true, url: validated, hasAuth: !!nextAuth });
     }
     return new Promise(resolve => {
-      storage.set({ monitorWebhookUrl: validated }, () => {
+      storage.set({ monitorWebhookUrl: validated, monitorWebhookAuth: nextAuth }, () => {
         if (globalThis.chrome.runtime?.lastError) resolve({ ok: false, error: 'Webhook 未保存，请重试' });
         else if (epoch === webhookEpoch) {
           webhookUrl = validated;
+          webhookAuth = nextAuth;
           publish();
-          resolve({ ok: true, url: validated });
-        } else resolve({ ok: true, url: webhookUrl });
+          resolve({ ok: true, url: validated, hasAuth: !!nextAuth });
+        } else resolve({ ok: true, url: webhookUrl, hasAuth: !!webhookAuth });
       });
     });
   }
@@ -180,16 +193,20 @@
         accountsFromChange = true;
         applyList(changes.monitorAccounts.newValue);
       }
-      if (Object.hasOwn(changes, 'monitorWebhookUrl')) {
+      if (Object.hasOwn(changes, 'monitorWebhookUrl') || Object.hasOwn(changes, 'monitorWebhookAuth')) {
         webhookFromChange = true;
-        webhookUrl = typeof changes.monitorWebhookUrl.newValue === 'string' ? changes.monitorWebhookUrl.newValue : '';
+        if (Object.hasOwn(changes, 'monitorWebhookUrl')) webhookUrl = typeof changes.monitorWebhookUrl.newValue === 'string' ? changes.monitorWebhookUrl.newValue : '';
+        if (Object.hasOwn(changes, 'monitorWebhookAuth')) webhookAuth = validateWebhookAuth(changes.monitorWebhookAuth.newValue) || '';
         publish();
       }
     });
-    storage.local.get({ monitorAccounts: [], monitorWebhookUrl: '' }, saved => {
+    storage.local.get({ monitorAccounts: [], monitorWebhookUrl: '', monitorWebhookAuth: '' }, saved => {
       if (globalThis.chrome.runtime?.lastError) return;
       if (accountEpoch === 0 && !accountsFromChange) applyList(saved.monitorAccounts);
-      if (webhookEpoch === 0 && !webhookFromChange) webhookUrl = typeof saved.monitorWebhookUrl === 'string' ? saved.monitorWebhookUrl : '';
+      if (webhookEpoch === 0 && !webhookFromChange) {
+        webhookUrl = typeof saved.monitorWebhookUrl === 'string' ? saved.monitorWebhookUrl : '';
+        webhookAuth = validateWebhookAuth(saved.monitorWebhookAuth) || '';
+      }
       publish();
     });
   }
@@ -200,7 +217,9 @@
     notice: handle => notices.get(keyOf(handle)) || '',
     list: () => [...cache.values()].map(account => ({ ...account })),
     webhook: () => webhookUrl,
+    hasWebhookAuth: () => !!webhookAuth,
     validateWebhook,
+    validateWebhookAuth,
     toggle,
     add,
     remove,
