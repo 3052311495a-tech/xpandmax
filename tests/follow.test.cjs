@@ -186,9 +186,10 @@ test('桥接兼容新旧关注状态并读取原生关注结果，不读取关�
     await f.w.fetch('fixture'); await tick();
     assert.equal(Object.hasOwn(messages.at(-1).users.find(user => user.handle === 'alice'), 'userId'), false);
     url = 'https://x.com/i/api/graphql/example/UserByRestId';
-    body = { __typename: 'User', rest_id: '42', core: { screen_name: 'Carol' }, relationship_counts: { followers: 8 } };
+    body = { __typename: 'User', rest_id: '42', core: { screen_name: 'Carol', name: ' 卡罗尔 ' }, relationship_counts: { followers: 8 } };
     await f.w.fetch('fixture'); await tick();
     assert.equal(messages.at(-1).users.find(user => user.handle === 'carol').userId, '42');
+    assert.equal(messages.at(-1).users.find(user => user.handle === 'carol').name, '卡罗尔');
     url = 'https://x.com/i/api/1.1/friendships/destroy.json';
     body = { screen_name: 'Carol', id_str: '42', followers_count: 8, following: true };
     await f.w.fetch('fixture'); await tick();

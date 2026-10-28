@@ -2,7 +2,7 @@
   'use strict';
   const CHANNEL = 'x-follower-count-v1';
   const BADGE = 'data-xfc-badge';
-  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked', 'userId'];
+  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked', 'userId', 'name'];
   const counts = new Map();
   const TTL = 30 * 60 * 1000;
   let scheduled = false;
@@ -153,6 +153,11 @@
     if (theme) button.dataset.xfcTheme = theme;
     if (typeof record.userId === 'string' && /^\d{1,25}$/.test(record.userId)) button.dataset.xfcUserId = record.userId;
     else delete button.dataset.xfcUserId;
+    if (typeof record.name === 'string' && record.name) {
+      button.dataset.xfcName = record.name;
+      // 旧名单没有显示名，看到本人资料时顺手补上。
+      if (on) api.rememberName?.(handle, record.name);
+    } else delete button.dataset.xfcName;
     button.disabled = !!api.pending?.(handle);
     button.setAttribute('aria-pressed', String(on));
     const notice = api.notice?.(handle) || '';
@@ -390,7 +395,7 @@
       event.preventDefault();
       event.stopPropagation();
       if (!event.isTrusted || monitor.disabled) return;
-      window.xpandmaxMonitor?.toggle({ username: monitor.dataset.xfcHandle, userId: monitor.dataset.xfcUserId });
+      window.xpandmaxMonitor?.toggle({ username: monitor.dataset.xfcHandle, userId: monitor.dataset.xfcUserId, name: monitor.dataset.xfcName });
       return;
     }
     const follow = event.target instanceof Element ? event.target.closest('[data-xfc-follow]') : null;
