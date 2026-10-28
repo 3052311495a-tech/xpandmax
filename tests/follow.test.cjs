@@ -48,16 +48,42 @@ function setup() {
   return { dom, w, article, caret, send, state, nativeMenu, ready, start, unfollow, clicks: () => clicks };
 }
 
-test('关注按钮只给未关注的主帖作者显示，自己、引用作者、已关注和请求中不显示', async () => {
+test('关注按钮只给未关注的主帖作者显示，自己、引用作者、请求中和被屏蔽不显示', async () => {
   const f = setup();
   try {
     await f.ready();
     assert.equal(f.w.document.querySelectorAll('[data-xfc-follow]').length, 1);
     assert.equal(f.article.querySelector('[data-xfc-follow]').textContent, '关注');
-    for (const extra of [{ following: true }, { followRequestSent: true }, { followBlocked: true }]) {
+    for (const extra of [{ followRequestSent: true }, { followBlocked: true }]) {
       await f.ready({ following: false, followRequestSent: false, followBlocked: false, ...extra });
       assert.equal(f.w.document.querySelector('[data-xfc-follow]'), null);
     }
+  } finally { f.dom.window.close(); }
+});
+
+test('已经关注的主帖作者直接显示取消关注，引用作者和自己仍然不显示', async () => {
+  const f = setup();
+  try {
+    f.state.following = true;
+    await f.ready({ following: true });
+    f.send([{ handle: 'Bob', count: 2, bio: '引用', following: true }]);
+    await tick();
+    const button = f.article.querySelector('[data-xfc-follow]');
+    assert.equal(f.w.document.querySelectorAll('[data-xfc-follow]').length, 1);
+    assert.equal(button.textContent, '取消关注');
+    assert.equal(button.dataset.xfcFollowAction, 'unfollow');
+    assert.equal(button.disabled, false);
+    assert.equal(f.w.document.querySelector('[role="link"] [data-xfc-follow]'), null);
+    f.nativeMenu('取消关注 @Alice', () => {
+      f.state.following = false;
+      f.state.followingRevision += 1;
+      f.send([{ handle: 'Alice', following: false }]);
+    });
+    await f.unfollow();
+    await tick();
+    assert.equal(f.clicks(), 1);
+    assert.equal(f.article.querySelector('[data-xfc-follow]').textContent, '关注');
+    assert.equal(f.article.querySelector('[data-xfc-follow]').dataset.xfcFollowAction, 'follow');
   } finally { f.dom.window.close(); }
 });
 
