@@ -3,7 +3,8 @@
   // 与 translation-background.js 的 validateMonitorWebhook 保持同一规则。
   function validateWebhookAuth(value) {
     if (value == null) return '';
-    const text = String(value).trim();
+    // 常见误贴：把整行「Authorization: Bearer …」粘进来，只保留冒号后的值。
+    const text = String(value).trim().replace(/^authorization\s*:\s*/i, '');
     if (!text) return '';
     if (text.length > 4096 || /[\u0000-\u001F\u007F]/.test(text)) return null;
     return text;
@@ -41,7 +42,13 @@
     if (!HANDLE.test(username)) return null;
     const account = { username, profileUrl: `https://x.com/${username}` };
     if (typeof input.userId === 'string' && /^\d{1,25}$/.test(input.userId)) account.userId = input.userId;
+    const name = nameOf(input.name);
+    if (name) account.name = name;
     return account;
+  }
+
+  function nameOf(value) {
+    return typeof value === 'string' ? value.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 100) : '';
   }
 
   function normalizeList(value) {
@@ -128,6 +135,15 @@
     const stored = { ...account, addedAt: Date.now() };
     await persist([...cache.values(), stored]);
     return remember(account.username, { ok: true, monitored: true, ...remoteFields(await notifyRemote('monitor', stored)) });
+  }
+
+  // 只改显示名，不通知 Webhook。
+  function rememberName(handle, value) {
+    const key = keyOf(handle);
+    const name = nameOf(value);
+    const existing = cache.get(key);
+    if (!existing || !name || existing.name === name || pending.has(key)) return Promise.resolve();
+    return persist([...cache.values()].map(account => account.username === key ? { ...account, name } : account)).catch(() => {});
   }
 
   async function remove(username) {
@@ -223,6 +239,7 @@
     toggle,
     add,
     remove,
+    rememberName,
     saveWebhook
   };
 })();

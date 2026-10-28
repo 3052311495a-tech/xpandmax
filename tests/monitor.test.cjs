@@ -213,6 +213,8 @@ test('Webhook 保存前校验地址；未授权不写入', async () => {
     await tick();
     assert.equal(backend.data.monitorWebhookAuth, 'Bearer synthetic-token');
     assert.equal(w.xpandmaxMonitor.validateWebhookAuth('Bearer bad\r\nbad'), null);
+    assert.equal(w.xpandmaxMonitor.validateWebhookAuth('Authorization: Bearer synthetic-token'), 'Bearer synthetic-token');
+    assert.equal(w.xpandmaxMonitor.validateWebhookAuth('authorization:Bearer synthetic-token'), 'Bearer synthetic-token');
     const rejected = await w.xpandmaxMonitor.saveWebhook(input.value, 'Bearer bad\r\nbad');
     assert.equal(rejected.ok, false);
     assert.equal(backend.data.monitorWebhookAuth, 'Bearer synthetic-token');
@@ -223,21 +225,40 @@ test('Webhook 保存前校验地址；未授权不写入', async () => {
   } finally { dom.window.close(); }
 });
 
+test('监控名单带上账号显示名，旧名单看到资料时补名字且不通知 Webhook', async () => {
+  const page = setup({ monitorAccounts: [{ username: 'bob', profileUrl: 'https://x.com/bob', addedAt: 1 }] });
+  try {
+    page.send([{ handle: 'Alice', count: 10, userId: '42', name: '  爱丽丝\u0007 ' }, { handle: 'Bob', count: 2, name: '鲍勃' }]);
+    await tick();
+    const alice = page.w.document.querySelector('article [data-xfc-inline-profile] [data-xfc-monitor]');
+    assert.equal(alice.dataset.xfcName, '  爱丽丝\u0007 ');
+    await page.w.xpandmaxMonitor.toggle({ username: alice.dataset.xfcHandle, userId: alice.dataset.xfcUserId, name: alice.dataset.xfcName });
+    await tick();
+    const byName = Object.fromEntries(page.data.monitorAccounts.map(account => [account.username, account.name]));
+    assert.deepEqual(byName, { alice: '爱丽丝', bob: '鲍勃' });
+    assert.deepEqual(page.chrome.sent.map(message => message.action), ['monitor']);
+    const writes = page.writes.length;
+    page.send([{ handle: 'Bob', count: 3, name: '鲍勃' }]);
+    await tick();
+    assert.equal(page.writes.length, writes);
+  } finally { page.dom.window.close(); }
+});
+
 test('弹窗列出本机名单，移出后通知 unmonitor', async () => {
   const dom = new JSDOM(fs.readFileSync('extension/popup.html', 'utf8'), { url: 'chrome-extension://test/popup.html', runScripts: 'outside-only' });
   const w = dom.window;
-  const backend = storageBackend({ monitorAccounts: [{ username: 'alice', userId: '7', profileUrl: 'https://x.com/alice', addedAt: 5 }, { username: 'carol', profileUrl: 'https://x.com/carol', addedAt: 9 }] });
+  const backend = storageBackend({ monitorAccounts: [{ username: 'alice', userId: '7', name: '爱丽丝', profileUrl: 'https://x.com/alice', addedAt: 5 }, { username: 'carol', profileUrl: 'https://x.com/carol', addedAt: 9 }] });
   w.chrome = backend.chrome;
   try {
     w.eval(fs.readFileSync('extension/monitor.js', 'utf8'));
     w.eval(fs.readFileSync('extension/popup.js', 'utf8'));
-    assert.deepEqual([...w.document.querySelectorAll('#monitor-accounts span')].map(node => node.textContent), ['@carol', '@alice']);
+    assert.deepEqual([...w.document.querySelectorAll('#monitor-accounts span')].map(node => node.textContent), ['@carol', '爱丽丝 @alice']);
     w.document.querySelector('[aria-label="移出 @carol"]').click();
     await tick();
     assert.deepEqual(Array.from(backend.data.monitorAccounts, account => account.username), ['alice']);
     assert.equal(w.chrome.sent.at(-1).action, 'unmonitor');
     assert.equal(w.chrome.sent.at(-1).account.username, 'carol');
-    assert.equal(w.document.querySelector('#monitor-accounts span').textContent, '@alice');
+    assert.equal(w.document.querySelector('#monitor-accounts span').textContent, '爱丽丝 @alice');
     assert.equal(w.document.querySelector('#monitor-empty').hidden, true);
   } finally { dom.window.close(); }
 });
@@ -299,6 +320,9 @@ test('配置了 Webhook 才 POST 固定字段，不附带简介、Cookie 或调�
   const injected = setupBackground({ webhook: 'https://hooks.example/xpand', auth: 'Bearer bad\r\nX-Evil: 1' });
   assert.equal((await injected.send({ type: 'monitor-notify', action: 'unmonitor', account: { username: 'alice' } })).notified, true);
   assert.equal(injected.requests[0][1].headers.Authorization, undefined);
+  const pasted = setupBackground({ webhook: 'https://hooks.example/xpand', auth: 'Authorization: Bearer synthetic-token' });
+  assert.equal((await pasted.send({ type: 'monitor-notify', action: 'monitor', account: { username: 'alice' } })).notified, true);
+  assert.equal(pasted.requests[0][1].headers.Authorization, 'Bearer synthetic-token');
   assert.equal(live.requests[0][1].body, JSON.stringify({
     action: 'monitor', platform: 'x', username: 'alice', userId: '42', profileUrl: 'https://x.com/alice', source: 'xpandmax'
   }));
@@ -308,7 +332,11 @@ test('配置了 Webhook 才 POST 固定字段，不附带简介、Cookie 或调�
   assert.equal(Object.hasOwn(JSON.parse(live.requests[1][1].body), 'userId'), false);
 
   const failed = setupBackground({ webhook: 'https://hooks.example/xpand', status: 500 });
-  assert.equal((await failed.send({ type: 'monitor-notify', action: 'monitor', account: { username: 'alice' } })).notified, false);
+  const failedResult = await failed.send({ type: 'monitor-notify', action: 'monitor', account: { username: 'alice' } });
+  assert.equal(failedResult.notified, false);
+  assert.match(failedResult.error, /HTTP 500/);
+  const unauthorized = setupBackground({ webhook: 'https://hooks.example/xpand', status: 401 });
+  assert.match((await unauthorized.send({ type: 'monitor-notify', action: 'monitor', account: { username: 'alice' } })).error, /HTTP 401.*Authorization/);
   const offline = setupBackground({ webhook: 'https://hooks.example/xpand', fail: true });
   assert.match((await offline.send({ type: 'monitor-notify', action: 'unmonitor', account: { username: 'alice' } })).error, /失败/);
 

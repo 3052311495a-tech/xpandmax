@@ -65,7 +65,15 @@
       for (const account of accounts) {
         const item = document.createElement('li');
         const name = document.createElement('span');
-        name.textContent = `@${account.username}`;
+        name.className = 'monitor-account';
+        if (account.name) {
+          const display = document.createElement('strong');
+          display.textContent = account.name;
+          name.append(display, ' ');
+        }
+        const handle = document.createElement('small');
+        handle.textContent = `@${account.username}`;
+        name.append(handle);
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.textContent = '移出';

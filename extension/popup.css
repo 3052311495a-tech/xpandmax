@@ -35,5 +35,7 @@ input:disabled { opacity: .5; cursor: wait; }
 #monitor-accounts { list-style: none; max-height: 140px; margin: 12px 0 0; padding: 0; overflow: auto; }
 #monitor-accounts li { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 #monitor-accounts button { font: inherit; }
+#monitor-accounts .monitor-account { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#monitor-accounts .monitor-account small { color: light-dark(#647581, #a0adb7); font-size: 12px; }
 #monitor-empty { margin: 8px 0 0; color: light-dark(#647581, #a0adb7); font-size: 12px; }
 #monitor-empty[hidden] { display: none; }

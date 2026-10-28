@@ -188,7 +188,8 @@
 
   function validateMonitorAuth(value) {
     if (value == null) return '';
-    const text = String(value).trim();
+    // 常见误贴：把整行「Authorization: Bearer …」粘进来，只保留冒号后的值。
+    const text = String(value).trim().replace(/^authorization\s*:\s*/i, '');
     if (!text) return '';
     if (text.length > 4096 || /[\u0000-\u001F\u007F]/.test(text)) return null;
     return text;
@@ -231,7 +232,8 @@
         headers: { 'Content-Type': 'application/json', ...(monitorAuth ? { Authorization: monitorAuth } : {}) }, body: JSON.stringify(payload), signal: controller.signal
       });
       try { await response.body?.cancel?.(); } catch { /* 通知不需要响应正文。 */ }
-      if (!response.ok) return { ok: true, notified: false, error: 'Webhook 通知失败' };
+      if (response.status === 401 || response.status === 403) return { ok: true, notified: false, error: `Webhook 通知失败（HTTP ${response.status}，请检查 Authorization）` };
+      if (!response.ok) return { ok: true, notified: false, error: `Webhook 通知失败（HTTP ${response.status}）` };
       return { ok: true, notified: true };
     } catch {
       return { ok: true, notified: false, error: 'Webhook 通知失败' };

@@ -5,7 +5,7 @@
   const users = new Map();
   const tweets = new Map();
   const TTL = 30 * 60 * 1000;
-  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked', 'userId'];
+  const FIELDS = ['count', 'bio', 'location', 'following', 'followRequestSent', 'followBlocked', 'userId', 'name'];
 
   function userIdOf(node) {
     if (node.__typename === 'Tweet' || node.__typename === 'TweetWithVisibilityResults') return '';
@@ -63,6 +63,8 @@
         if (typeof location === 'string') record.location = location.slice(0, 300);
         const userId = userIdOf(node);
         if (userId) record.userId = userId;
+        const name = node.core?.name ?? node.legacy?.name;
+        if (typeof name === 'string' && name.trim()) record.name = name.trim().slice(0, 100);
         if (Object.keys(record).length > 1) output.set(key, { ...output.get(key), ...record });
       }
       for (const value of Object.values(node)) {
